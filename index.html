@@ -4,85 +4,130 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>集金管理くん</title>
+
 <style>
 body{margin:0;font-family:sans-serif;background:#f3f8ff}
 header{background:#1976d2;color:#fff;padding:15px;text-align:center;font-size:22px;font-weight:bold}
-.container{padding:15px;max-width:700px;margin:auto}
+.container{padding:15px;max-width:800px;margin:auto}
 .card{background:#fff;padding:15px;border-radius:14px;margin-bottom:14px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
-input,button{width:100%;padding:12px;margin:6px 0;border-radius:10px;border:1px solid #ccc;box-sizing:border-box}
+input,button{width:100%;padding:10px;margin:6px 0;border-radius:10px;border:1px solid #ccc;box-sizing:border-box;font-size:14px}
 button{background:#1976d2;color:#fff;border:none;font-weight:bold}
-.small{width:auto;padding:8px 10px;margin-right:6px}
+.small{width:auto;padding:6px 10px;margin-right:5px;font-size:12px}
+.row{display:flex;gap:6px}
+.row input{flex:1}
 .hidden{display:none}
 .list{padding:10px;border-bottom:1px solid #ddd}
-.red{color:#e53935;font-weight:bold}
-.green{color:#43a047;font-weight:bold}
+.badge{padding:3px 8px;border-radius:8px;color:#fff;font-size:12px}
+.red{background:#e53935}
+.green{background:#43a047}
+.gray{background:#777}
 </style>
+
 </head>
+
 <body>
 
 <header>集金管理くん</header>
 
 <div class="container">
 
+<!-- LOGIN -->
 <div id="loginPage" class="card">
 <h3>ログイン</h3>
-<input id="id" placeholder="ID">
-<input id="pw" type="password" placeholder="パスワード">
+<input id="loginId" placeholder="ID">
+<input id="loginPw" type="password" placeholder="パスワード">
 <button onclick="login()">ログイン</button>
 </div>
 
+<!-- MAIN -->
 <div id="mainPage" class="hidden">
 
 <div class="card">
 <div id="welcome"></div>
 <button onclick="show('home')">ホーム</button>
-<button onclick="show('add')">登録</button>
+<button onclick="show('add')">納品登録</button>
 <button onclick="show('list')">一覧</button>
+<button id="adminBtn" onclick="show('admin')" class="hidden">管理者</button>
 <button onclick="logout()">ログアウト</button>
 </div>
 
+<!-- HOME -->
 <div id="homePage" class="card">
 <h3>ホーム</h3>
 <div id="summary"></div>
 </div>
 
+<!-- ADD -->
 <div id="addPage" class="card hidden">
 <h3>納品登録</h3>
+
 <input id="customer" placeholder="取引先名">
 <input id="date" type="date">
-<input id="total" type="number" placeholder="金額">
+
+<div id="items"></div>
+<button onclick="addItem()">＋商品追加</button>
+
+<div>合計：¥<span id="total">0</span></div>
+
 <button onclick="save()">保存</button>
 </div>
 
+<!-- LIST -->
 <div id="listPage" class="card hidden">
 <h3>一覧</h3>
 <div id="records"></div>
 </div>
 
+<!-- ADMIN -->
+<div id="adminPage" class="card hidden">
+<h3>管理者ページ</h3>
+
+<h4>社員管理</h4>
+<div id="userList"></div>
+
+<h4>社員追加</h4>
+<input id="newId" placeholder="ID">
+<input id="newName" placeholder="表示名">
+<input id="newPw" placeholder="パスワード">
+<button onclick="addUser()">追加</button>
+
+<hr>
+
+<h4>社員別売上残</h4>
+<div id="adminSummary"></div>
+
 </div>
+
+</div>
+
 </div>
 
 <script>
-const users={
-tanaka:"1234",
-sato:"1234",
-suzuki:"1234",
-yamamoto:"1234"
+
+/* ===== USERS ===== */
+let users = JSON.parse(localStorage.getItem("users")) || {
+arai:{pass:"1234",name:"新井",admin:false},
+hosoya:{pass:"1234",name:"細谷",admin:false},
+ikeda:{pass:"1234",name:"池田",admin:false},
+yamamoto:{pass:"1234",name:"山本",admin:true}
 };
 
-let user="";
+let currentUser=null;
 let editIndex=-1;
 
+/* ===== INIT LOGIN ===== */
 if(localStorage.getItem("loginUser")){
-user=localStorage.getItem("loginUser");
+currentUser=localStorage.getItem("loginUser");
 start();
 }
 
+/* ===== LOGIN ===== */
 function login(){
-let id=document.getElementById("id").value;
-let pw=document.getElementById("pw").value;
-if(users[id]===pw){
-user=id;
+let id=loginId.value;
+let pw=loginPw.value;
+
+if(users[id] && users[id].pass===pw){
+currentUser=id;
 localStorage.setItem("loginUser",id);
 start();
 }else alert("ログイン失敗");
@@ -93,41 +138,91 @@ localStorage.removeItem("loginUser");
 location.reload();
 }
 
+/* ===== START ===== */
 function start(){
-document.getElementById("loginPage").classList.add("hidden");
-document.getElementById("mainPage").classList.remove("hidden");
-document.getElementById("welcome").innerHTML=user+" さん";
-document.getElementById("date").valueAsDate=new Date();
-showSummary();
+loginPage.classList.add("hidden");
+mainPage.classList.remove("hidden");
+
+welcome.innerHTML=users[currentUser].name+" さん";
+
+adminBtn.classList.toggle("hidden",!users[currentUser].admin);
+
+date.valueAsDate=new Date();
+
+addItem();
 load();
+summaryView();
+if(users[currentUser].admin) adminView();
 }
 
-function show(x){
-document.getElementById("homePage").classList.add("hidden");
-document.getElementById("addPage").classList.add("hidden");
-document.getElementById("listPage").classList.add("hidden");
+/* ===== NAV ===== */
+function show(p){
+homePage.classList.add("hidden");
+addPage.classList.add("hidden");
+listPage.classList.add("hidden");
+adminPage.classList.add("hidden");
 
-if(x=="home")document.getElementById("homePage").classList.remove("hidden");
-if(x=="add")document.getElementById("addPage").classList.remove("hidden");
-if(x=="list")document.getElementById("listPage").classList.remove("hidden");
+if(p=="home")homePage.classList.remove("hidden");
+if(p=="add")addPage.classList.remove("hidden");
+if(p=="list")listPage.classList.remove("hidden");
+if(p=="admin")adminPage.classList.remove("hidden");
 }
 
+/* ===== DATA ===== */
 function getData(){
 return JSON.parse(localStorage.getItem("records")||"[]");
 }
-
 function setData(d){
 localStorage.setItem("records",JSON.stringify(d));
 }
 
+/* ===== ITEMS ===== */
+function addItem(){
+let div=document.createElement("div");
+div.className="row";
+div.innerHTML=`
+<input placeholder="商品名" class="n">
+<input placeholder="数量" type="number" class="q" oninput="calc()">
+<input placeholder="単価" type="number" class="p" oninput="calc()">
+`;
+items.appendChild(div);
+}
+
+function calc(){
+let q=document.querySelectorAll(".q");
+let p=document.querySelectorAll(".p");
+let sum=0;
+
+for(let i=0;i<q.length;i++){
+sum += (q[i].value||0)*(p[i].value||0);
+}
+
+total.innerText=sum;
+}
+
+/* ===== SAVE ===== */
 function save(){
 let d=getData();
 
+let itemNodes=document.querySelectorAll("#items .row");
+
+let itemsArr=[];
+itemNodes.forEach(r=>{
+itemsArr.push({
+name:r.querySelector(".n").value,
+qty:Number(r.querySelector(".q").value||0),
+price:Number(r.querySelector(".p").value||0)
+});
+});
+
+let totalVal=itemsArr.reduce((a,b)=>a+b.qty*b.price,0);
+
 let obj={
-user:user,
+user:currentUser,
 customer:customer.value,
 date:date.value,
-total:Number(total.value),
+items:itemsArr,
+total:totalVal,
 paid:false
 };
 
@@ -140,73 +235,147 @@ editIndex=-1;
 }
 
 setData(d);
-customer.value="";
-total.value="";
 load();
-showSummary();
+summaryView();
 show("list");
 }
 
+/* ===== LIST ===== */
 function load(){
 let d=getData();
-let area=document.getElementById("records");
-area.innerHTML="";
+records.innerHTML="";
 
 d.forEach((r,i)=>{
-if(r.user==user || user=="yamamoto"){
-area.innerHTML+=`
+if(r.user==currentUser || users[currentUser].admin){
+
+records.innerHTML+=`
 <div class="list">
-${r.date} / ${r.customer} / ¥${r.total}<br>
-<span class="${r.paid?'green':'red'}">${r.paid?'集金済':'未集金'}</span><br>
+${r.date} / ${r.customer}<br>
+¥${r.total}<br>
+<span class="badge ${r.paid?'green':'red'}">${r.paid?'集金済':'未集金'}</span><br>
+
 <button class="small" onclick="toggle(${i})">切替</button>
-<button class="small" onclick="editRec(${i})">編集</button>
-<button class="small" onclick="delRec(${i})">削除</button>
+<button class="small" onclick="edit(${i})">編集</button>
+<button class="small" onclick="del(${i})">削除</button>
 </div>
 `;
 }
 });
 }
 
+/* ===== ACTION ===== */
 function toggle(i){
 let d=getData();
 d[i].paid=!d[i].paid;
 setData(d);
 load();
-showSummary();
+summaryView();
+adminView();
 }
 
-function editRec(i){
-let d=getData();
-customer.value=d[i].customer;
-date.value=d[i].date;
-total.value=d[i].total;
-editIndex=i;
-show("add");
-}
-
-function delRec(i){
+function del(i){
 if(confirm("削除しますか？")){
 let d=getData();
 d.splice(i,1);
 setData(d);
 load();
-showSummary();
+summaryView();
+adminView();
 }
 }
 
-function showSummary(){
-let d=getData().filter(x=>x.user==user || user=="yamamoto");
+function edit(i){
+let d=getData()[i];
+customer.value=d.customer;
+date.value=d.date;
+
+items.innerHTML="";
+d.items.forEach(it=>{
+let div=document.createElement("div");
+div.className="row";
+div.innerHTML=`
+<input class="n" value="${it.name}">
+<input class="q" value="${it.qty}" type="number" oninput="calc()">
+<input class="p" value="${it.price}" type="number" oninput="calc()">
+`;
+items.appendChild(div);
+});
+
+editIndex=i;
+calc();
+show("add");
+}
+
+/* ===== SUMMARY USER ===== */
+function summaryView(){
+let d=getData().filter(x=>x.user==currentUser);
 
 let count=d.length;
 let unpaid=d.filter(x=>!x.paid).length;
 let remain=d.filter(x=>!x.paid).reduce((a,b)=>a+b.total,0);
 
 summary.innerHTML=`
-件数：${count}件<br>
-未集金：${unpaid}件<br>
+件数：${count}<br>
+未集金：${unpaid}<br>
 売上残合計：¥${remain}
 `;
 }
+
+/* ===== ADMIN ===== */
+function adminView(){
+if(!users[currentUser].admin) return;
+
+let d=getData();
+
+let html="<h4>社員別売上残</h4>";
+
+Object.keys(users).forEach(u=>{
+if(users[u].admin) return;
+
+let ud=d.filter(x=>x.user==u);
+let remain=ud.filter(x=>!x.paid).reduce((a,b)=>a+b.total,0);
+
+html+=`${users[u].name}：¥${remain}<br>`;
+});
+
+adminSummary.innerHTML=html;
+
+/* user list */
+userList.innerHTML="";
+Object.keys(users).forEach(u=>{
+
+userList.innerHTML+=`
+<div class="list">
+ID:${u}<br>
+名前:${users[u].name}<br>
+
+<button class="small" onclick="delUser('${u}')">削除</button>
+</div>
+`;
+});
+}
+
+/* ===== USER ADD ===== */
+function addUser(){
+users[newId.value]={
+pass:newPw.value,
+name:newName.value,
+admin:false
+};
+
+localStorage.setItem("users",JSON.stringify(users));
+adminView();
+}
+
+/* ===== USER DELETE ===== */
+function delUser(id){
+if(id=="yamamoto") return alert("削除不可");
+
+delete users[id];
+localStorage.setItem("users",JSON.stringify(users));
+adminView();
+}
+
 </script>
 
 </body>
