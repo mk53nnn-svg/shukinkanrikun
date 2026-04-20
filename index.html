@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>配達メモマップ</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root {
+    --bg: #0f1117; --surface: #1a1d27; --surface2: #22263a;
+    --accent: #f0c040; --accent2: #e07830; --text: #e8eaf0;
+    --muted: #7a7f9a; --border: #2e3248; --green: #3dd68c; --red: #f05060;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: 'Noto Sans JP', sans-serif; background: var(--bg); color: var(--text); height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+  header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; z-index: 100; }
+  .app-title { font-size: 15px; font-weight: 700; color: var(--accent); letter-spacing: .05em; display: flex; align-items: center; gap: 6px; }
+  .header-stats { display: flex; gap: 12px; font-family: 'DM Mono', monospace; font-size: 12px; }
+  .stat { color: var(--muted); }
+  .stat b { color: var(--green); font-weight: 500; }
+  .tabs { display: flex; background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .tab { flex: 1; padding: 10px; text-align: center; font-size: 13px; font-weight: 500; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; transition: all .2s; }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  #map-view { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+  #map { flex: 1; }
+  .gps-btn { position: absolute; bottom: 44px; right: 12px; z-index: 500; width: 44px; height: 44px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,.5); transition: background .15s; }
+  .gps-btn:active { background: var(--surface2); }
+  .map-hint { background: var(--surface); border-top: 1px solid var(--border); padding: 8px 16px; font-size: 12px; color: var(--muted); text-align: center; flex-shrink: 0; }
+  #list-view { flex: 1; overflow-y: auto; display: none; flex-direction: column; }
+  .list-header { padding: 14px 16px 8px; font-size: 12px; color: var(--muted); font-weight: 500; letter-spacing: .08em; text-transform: uppercase; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  .total-badge { background: var(--surface2); border: 1px solid var(--border); padding: 3px 10px; border-radius: 20px; font-family: 'DM Mono', monospace; font-size: 12px; color: var(--green); }
+  .record-item { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; cursor: pointer; transition: background .15s; }
+  .record-item:active { background: var(--surface2); }
+  .record-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .record-memo { font-size: 14px; font-weight: 500; line-height: 1.4; flex: 1; }
+  .record-pay { font-family: 'DM Mono', monospace; font-size: 15px; font-weight: 500; color: var(--accent); white-space: nowrap; }
+  .record-meta { display: flex; gap: 12px; font-size: 11px; color: var(--muted); flex-wrap: wrap; }
+  .empty-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--muted); padding: 40px; text-align: center; }
+  .empty-state .big { font-size: 40px; }
+  .empty-state p { font-size: 13px; line-height: 1.7; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 1000; display: flex; align-items: flex-end; justify-content: center; opacity: 0; pointer-events: none; transition: opacity .25s; }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+  .modal { background: var(--surface); width: 100%; max-width: 500px; border-radius: 20px 20px 0 0; padding: 20px 20px 40px; border: 1px solid var(--border); border-bottom: none; transform: translateY(40px); transition: transform .25s ease; max-height: 90dvh; overflow-y: auto; }
+  .modal-overlay.open .modal { transform: translateY(0); }
+  .modal-handle { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 18px; }
+  .modal-title { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+  .modal-location { font-size: 11px; color: var(--muted); margin-bottom: 16px; font-family: 'DM Mono', monospace; }
+  .field-label { font-size: 11px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 6px; }
+  textarea, input[type="number"] { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: 'Noto Sans JP', sans-serif; font-size: 16px; padding: 12px 14px; margin-bottom: 14px; outline: none; transition: border-color .2s; -webkit-appearance: none; appearance: none; }
+  textarea:focus, input:focus { border-color: var(--accent); }
+  textarea { resize: none; height: 80px; }
+  .pay-row { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; }
+  .pay-row input { flex: 1; margin-bottom: 0; }
+  .pay-unit { font-size: 14px; color: var(--muted); }
+  .modal-actions { display: flex; gap: 10px; margin-top: 8px; }
+  .btn { flex: 1; padding: 14px; border-radius: 12px; border: none; font-size: 14px; font-weight: 700; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; transition: opacity .15s, transform .1s; }
+  .btn:active { transform: scale(.97); opacity: .85; }
+  .btn-primary { background: var(--accent); color: #111; }
+  .btn-cancel { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
+  .btn-delete { background: var(--red); color: #fff; flex: none; padding: 14px 18px; }
+  .detail-row { display: flex; justify-content: space-between; padding: 11px 0; border-bottom: 1px solid var(--border); font-size: 14px; gap: 12px; }
+  .detail-row:last-child { border-bottom: none; }
+  .detail-key { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .detail-val { font-weight: 500; text-align: right; word-break: break-all; }
+  .pin-wrap { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; }
+  .pin-dot { width: 20px; height: 20px; background: var(--accent); border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 2px solid #111; box-shadow: 0 2px 8px rgba(0,0,0,.6); }
+  .leaflet-control-zoom a { background: var(--surface) !important; color: var(--text) !important; border-color: var(--border) !important; }
+</style>
+</head>
+<body>
+<header>
+  <div class="app-title">🛵 配達メモマップ</div>
+  <div class="header-stats">
+    <div class="stat">件数 <b id="stat-count">0</b></div>
+    <div class="stat">合計 <b id="stat-total">¥0</b></div>
+  </div>
+</header>
+<div class="tabs">
+  <div class="tab active" id="tab-map" onclick="switchTab('map')">🗺 マップ</div>
+  <div class="tab" id="tab-list" onclick="switchTab('list')">📋 リスト</div>
+</div>
+<div id="map-view">
+  <div id="map"></div>
+  <div class="gps-btn" onclick="goToMyLocation()">📍</div>
+  <div class="map-hint">地図をタップして案件を追加</div>
+</div>
+<div id="list-view">
+  <div class="list-header">案件履歴<span class="total-badge" id="list-total-badge">¥0</span></div>
+  <div id="list-content"></div>
+</div>
+
+<div class="modal-overlay" id="add-modal" onclick="handleOverlayClick(event,'add-modal')">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="modal-title">新しい案件を記録</div>
+    <div class="modal-location" id="modal-location"></div>
+    <div class="field-label">メモ・内容</div>
+    <textarea id="input-memo" placeholder="例: ウーバー / マンション3F など"></textarea>
+    <div class="field-label">報酬</div>
+    <div class="pay-row">
+      <input type="number" id="input-pay" placeholder="0" inputmode="numeric">
+      <div class="pay-unit">円</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-cancel" onclick="closeModal('add-modal')">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveRecord()">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="detail-modal" onclick="handleOverlayClick(event,'detail-modal')">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">案件詳細</div>
+    <div id="detail-content"></div>
+    <div class="modal-actions" style="margin-top:16px">
+      <button class="btn btn-delete" onclick="deleteRecord()">削除</button>
+      <button class="btn btn-cancel" style="flex:1" onclick="closeModal('detail-modal')">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = 'delivery_records_v2';
+let records = [], map, pendingLat, pendingLng, editingId, detailId, markers = {};
+
+function loadRecords() { try { const r = localStorage.getItem(STORAGE_KEY); if (r) records = JSON.parse(r); } catch(e) {} }
+function saveRecords() { localStorage.setItem(STORAGE_KEY, JSON.stringify(records)); }
+
+function initMap() {
+  map = L.map('map', { center: [35.87, 139.56], zoom: 13, zoomControl: false, tap: true });
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '© OpenStreetMap © CARTO', maxZoom: 19 }).addTo(map);
+  L.control.zoom({ position: 'bottomright' }).addTo(map);
+  map.on('click', function(e) {
+    pendingLat = e.latlng.lat; pendingLng = e.latlng.lng; editingId = null;
+    document.getElementById('modal-title').textContent = '新しい案件を記録';
+    document.getElementById('modal-location').textContent = '📍 ' + pendingLat.toFixed(5) + ', ' + pendingLng.toFixed(5);
+    document.getElementById('input-memo').value = '';
+    document.getElementById('input-pay').value = '';
+    openModal('add-modal');
+  });
+}
+
+function makeIcon() {
+  return L.divIcon({ className: '', html: '<div class="pin-wrap"><div class="pin-dot"></div></div>', iconSize: [36,36], iconAnchor: [18,32] });
+}
+function addMarkerToMap(rec) {
+  const m = L.marker([rec.lat, rec.lng], { icon: makeIcon() }).addTo(map);
+  m.on('click', function(e) { L.DomEvent.stopPropagation(e); showDetail(rec.id); });
+  markers[rec.id] = m;
+}
+function renderMarkers() { Object.values(markers).forEach(m => map.removeLayer(m)); markers = {}; records.forEach(addMarkerToMap); }
+
+function goToMyLocation() {
+  if (!navigator.geolocation) { alert('このブラウザでは現在地が使えません'); return; }
+  navigator.geolocation.getCurrentPosition(
+    pos => map.setView([pos.coords.latitude, pos.coords.longitude], 16, { animate: true }),
+    () => alert('現在地の取得に失敗しました。位置情報の許可を確認してください。')
+  );
+}
+
+function switchTab(tab) {
+  document.getElementById('tab-map').classList.toggle('active', tab === 'map');
+  document.getElementById('tab-list').classList.toggle('active', tab === 'list');
+  if (tab === 'map') {
+    document.getElementById('map-view').style.display = 'flex';
+    document.getElementById('list-view').style.display = 'none';
+    setTimeout(() => map.invalidateSize(), 60);
+  } else {
+    document.getElementById('map-view').style.display = 'none';
+    document.getElementById('list-view').style.display = 'flex';
+    renderList();
+  }
+}
+
+function openModal(id) {
+  document.getElementById(id).classList.add('open');
+  document.body.style.overflow = 'hidden';
+  if (id === 'add-modal') setTimeout(() => document.getElementById('input-memo').focus(), 300);
+}
+function closeModal(id) { document.getElementById(id).classList.remove('open'); document.body.style.overflow = ''; }
+function handleOverlayClick(e, id) { if (e.target === document.getElementById(id)) closeModal(id); }
+
+function saveRecord() {
+  const memo = document.getElementById('input-memo').value.trim();
+  const pay = parseInt(document.getElementById('input-pay').value) || 0;
+  if (!memo) { document.getElementById('input-memo').focus(); return; }
+  const now = new Date();
+  const dateStr = now.toLocaleString('ja-JP', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+  if (editingId) {
+    const r = records.find(r => r.id === editingId);
+    if (r) { r.memo = memo; r.pay = pay; }
+  } else {
+    const rec = { id: Date.now().toString(), lat: pendingLat, lng: pendingLng, memo, pay, date: dateStr };
+    records.unshift(rec);
+    addMarkerToMap(rec);
+  }
+  saveRecords(); updateStats(); closeModal('add-modal');
+}
+
+function showDetail(id) {
+  detailId = id;
+  const r = records.find(r => r.id === id);
+  if (!r) return;
+  document.getElementById('detail-content').innerHTML =
+    '<div class="detail-row"><span class="detail-key">メモ・内容</span><span class="detail-val">' + esc(r.memo) + '</span></div>' +
+    '<div class="detail-row"><span class="detail-key">報酬</span><span class="detail-val" style="color:var(--accent)">¥' + r.pay.toLocaleString() + '</span></div>' +
+    '<div class="detail-row"><span class="detail-key">日時</span><span class="detail-val">' + r.date + '</span></div>' +
+    '<div class="detail-row"><span class="detail-key">座標</span><span class="detail-val" style="font-family:monospace;font-size:11px;color:var(--muted)">' + r.lat.toFixed(5) + ', ' + r.lng.toFixed(5) + '</span></div>';
+  openModal('detail-modal');
+}
+
+function deleteRecord() {
+  if (!confirm('この案件を削除しますか？')) return;
+  records = records.filter(r => r.id !== detailId);
+  if (markers[detailId]) { map.removeLayer(markers[detailId]); delete markers[detailId]; }
+  saveRecords(); updateStats(); closeModal('detail-modal');
+}
+
+function renderList() {
+  const el = document.getElementById('list-content');
+  if (!records.length) {
+    el.innerHTML = '<div class="empty-state"><div class="big">🛵</div><p>まだ案件が記録されていません。<br>マップをタップして追加しましょう！</p></div>';
+    return;
+  }
+  el.innerHTML = records.map(r =>
+    '<div class="record-item" onclick="goToPin(\'' + r.id + '\')">' +
+    '<div class="record-top"><div class="record-memo">' + esc(r.memo) + '</div>' +
+    '<div class="record-pay">' + (r.pay > 0 ? '¥' + r.pay.toLocaleString() : '—') + '</div></div>' +
+    '<div class="record-meta"><span>📅 ' + r.date + '</span><span>📍 ' + r.lat.toFixed(3) + ', ' + r.lng.toFixed(3) + '</span></div>' +
+    '</div>'
+  ).join('');
+}
+
+function goToPin(id) {
+  const r = records.find(r => r.id === id);
+  if (!r) return;
+  switchTab('map');
+  setTimeout(() => { map.setView([r.lat, r.lng], 16, { animate: true }); showDetail(id); }, 150);
+}
+
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function updateStats() {
+  const total = records.reduce((s,r) => s + (r.pay||0), 0);
+  document.getElementById('stat-count').textContent = records.length;
+  document.getElementById('stat-total').textContent = '¥' + total.toLocaleString();
+  document.getElementById('list-total-badge').textContent = '¥' + total.toLocaleString();
+}
+
+loadRecords(); initMap(); renderMarkers(); updateStats();
+</script>
+</body>
+</html>
