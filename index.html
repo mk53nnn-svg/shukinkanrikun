@@ -21,6 +21,7 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold}
 .red{background:#e53935}
 .green{background:#43a047}
 </style>
+
 </head>
 
 <body>
@@ -73,18 +74,24 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold}
 <!-- LIST -->
 <div id="listPage" class="card hidden">
 <h3>一覧</h3>
+
+<button class="small" onclick="sortList('new')">新しい順</button>
+<button class="small" onclick="sortList('old')">古い順</button>
+<button class="small" onclick="sortList('az')">あいうえお順</button>
+
 <div id="records"></div>
 </div>
 
 <!-- ADMIN -->
 <div id="adminPage" class="card hidden">
-<h3>管理者ホーム</h3>
-<div id="adminSummary"></div>
+<h3>管理者ページ</h3>
 
-<hr>
+<h4>社員別売上残</h4>
+<div id="adminSummary"></div>
 
 <h4>社員管理</h4>
 <div id="userList"></div>
+
 </div>
 
 </div>
@@ -92,7 +99,6 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold}
 
 <script>
 
-/* ===== USERS ===== */
 let users = JSON.parse(localStorage.getItem("users")) || {
 arai:{pass:"1234",name:"新井",admin:false},
 hosoya:{pass:"1234",name:"細谷",admin:false},
@@ -101,14 +107,15 @@ yamamoto:{pass:"1234",name:"山本",admin:true}
 };
 
 let currentUser=null;
-let editId=null;
+let editIndex=-1;
+let currentSort="new";
 
-/* ===== LOGIN ===== */
 if(localStorage.getItem("loginUser")){
 currentUser=localStorage.getItem("loginUser");
 start();
 }
 
+/* LOGIN */
 function login(){
 let id=loginId.value;
 let pw=loginPw.value;
@@ -125,7 +132,7 @@ localStorage.removeItem("loginUser");
 location.reload();
 }
 
-/* ===== START ===== */
+/* START */
 function start(){
 loginPage.classList.add("hidden");
 mainPage.classList.remove("hidden");
@@ -143,7 +150,7 @@ summaryView();
 adminView();
 }
 
-/* ===== NAV ===== */
+/* NAV */
 function show(p){
 homePage.classList.add("hidden");
 addPage.classList.add("hidden");
@@ -156,7 +163,7 @@ if(p=="list")listPage.classList.remove("hidden");
 if(p=="admin")adminPage.classList.remove("hidden");
 }
 
-/* ===== DATA ===== */
+/* DATA */
 function getData(){
 return JSON.parse(localStorage.getItem("records")||"[]");
 }
@@ -164,7 +171,7 @@ function setData(d){
 localStorage.setItem("records",JSON.stringify(d));
 }
 
-/* ===== ITEMS ===== */
+/* ITEMS */
 function addItem(){
 let div=document.createElement("div");
 div.className="row";
@@ -188,7 +195,7 @@ sum+=(q[i].value||0)*(p[i].value||0);
 total.innerText=sum;
 }
 
-/* ===== SAVE ===== */
+/* SAVE */
 function save(){
 let d=getData();
 
@@ -206,7 +213,6 @@ price:Number(r.querySelector(".p").value||0)
 let totalVal=arr.reduce((a,b)=>a+b.qty*b.price,0);
 
 let obj={
-id: editId || Date.now(),
 user:currentUser,
 customer:customer.value,
 date:date.value,
@@ -215,12 +221,12 @@ total:totalVal,
 paid:false
 };
 
-if(editId){
-let idx=d.findIndex(x=>x.id==editId);
-d[idx]=obj;
-editId=null;
-}else{
+if(editIndex==-1){
 d.push(obj);
+}else{
+obj.paid=d[editIndex].paid;
+d[editIndex]=obj;
+editIndex=-1;
 }
 
 setData(d);
@@ -231,22 +237,32 @@ summaryView();
 show("list");
 }
 
-/* ===== RESET ===== */
+/* RESET FORM */
 function resetForm(){
 customer.value="";
 date.valueAsDate=new Date();
 items.innerHTML="";
 total.innerText=0;
-editId=null;
+editIndex=-1;
 }
 
-/* ===== LIST ===== */
+/* LIST */
 function load(){
 let d=getData();
 
+if(currentSort=="new"){
+d.sort((a,b)=>new Date(b.date)-new Date(a.date));
+}
+if(currentSort=="old"){
+d.sort((a,b)=>new Date(a.date)-new Date(b.date));
+}
+if(currentSort=="az"){
+d.sort((a,b)=>a.customer.localeCompare(b.customer,'ja'));
+}
+
 records.innerHTML="";
 
-d.forEach(r=>{
+d.forEach((r,i)=>{
 if(r.user==currentUser || users[currentUser].admin){
 
 records.innerHTML+=`
@@ -255,30 +271,35 @@ ${r.date} / ${r.customer}<br>
 ¥${r.total}<br>
 <span class="badge ${r.paid?'green':'red'}">${r.paid?'集金済':'未集金'}</span><br>
 
-<button class="small" onclick="toggle(${r.id})">切替</button>
-<button class="small" onclick="edit(${r.id})">編集</button>
-<button class="small" onclick="del(${r.id})">削除</button>
+<button class="small" onclick="toggle(${i})">切替</button>
+<button class="small" onclick="edit(${i})">編集</button>
+<button class="small" onclick="del(${i})">削除</button>
 </div>
 `;
 }
 });
 }
 
-/* ===== ACTION (ID方式) ===== */
-function toggle(id){
+/* SORT */
+function sortList(type){
+currentSort=type;
+load();
+}
+
+/* ACTION */
+function toggle(i){
 let d=getData();
-let t=d.find(x=>x.id==id);
-t.paid=!t.paid;
+d[i].paid=!d[i].paid;
 setData(d);
 load();
 summaryView();
 adminView();
 }
 
-function del(id){
+function del(i){
 if(confirm("削除しますか？")){
 let d=getData();
-d=d.filter(x=>x.id!=id);
+d.splice(i,1);
 setData(d);
 load();
 summaryView();
@@ -286,15 +307,14 @@ adminView();
 }
 }
 
-function edit(id){
-let d=getData();
-let r=d.find(x=>x.id==id);
+function edit(i){
+let d=getData()[i];
 
-customer.value=r.customer;
-date.value=r.date;
+customer.value=d.customer;
+date.value=d.date;
 
 items.innerHTML="";
-r.items.forEach(it=>{
+d.items.forEach(it=>{
 let div=document.createElement("div");
 div.className="row";
 div.innerHTML=`
@@ -305,12 +325,12 @@ div.innerHTML=`
 items.appendChild(div);
 });
 
-editId=id;
+editIndex=i;
 calc();
 show("add");
 }
 
-/* ===== SUMMARY USER ===== */
+/* SUMMARY */
 function summaryView(){
 let d=getData().filter(x=>x.user==currentUser);
 
@@ -324,13 +344,13 @@ summary.innerHTML=`
 `;
 }
 
-/* ===== ADMIN HOME ===== */
+/* ADMIN */
 function adminView(){
 if(!users[currentUser].admin) return;
 
 let d=getData();
 
-adminSummary.innerHTML="<h4>社員別売上残</h4>";
+let html="<h4>社員別売上残</h4>";
 
 Object.keys(users).forEach(u=>{
 if(users[u].admin) return;
@@ -338,10 +358,10 @@ if(users[u].admin) return;
 let remain=d.filter(x=>x.user==u && !x.paid)
 .reduce((a,b)=>a+b.total,0);
 
-adminSummary.innerHTML+=`
-${users[u].name}：¥${remain}<br>
-`;
+html+=`${users[u].name}：¥${remain}<br>`;
 });
+
+adminSummary.innerHTML=html;
 
 /* user list */
 userList.innerHTML="";
@@ -350,10 +370,31 @@ Object.keys(users).forEach(u=>{
 userList.innerHTML+=`
 <div class="list">
 ID:${u}<br>
-名前:${users[u].name}
+名前:${users[u].name}<br>
+<button class="small" onclick="delUser('${u}')">削除</button>
 </div>
 `;
 });
+}
+
+/* USER */
+function addUser(){
+users[newId.value]={
+pass:newPw.value,
+name:newName.value,
+admin:false
+};
+
+localStorage.setItem("users",JSON.stringify(users));
+adminView();
+}
+
+function delUser(id){
+if(id=="yamamoto")return alert("削除不可");
+
+delete users[id];
+localStorage.setItem("users",JSON.stringify(users));
+adminView();
 }
 
 </script>
