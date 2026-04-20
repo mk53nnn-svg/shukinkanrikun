@@ -4,171 +4,88 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>集金管理くん</title>
-
 <style>
-body{
-margin:0;
-font-family:-apple-system,BlinkMacSystemFont,sans-serif;
-background:#f3f8ff;
-color:#222;
-}
-header{
-background:#1976d2;
-color:#fff;
-padding:16px;
-font-size:22px;
-font-weight:bold;
-text-align:center;
-}
-.container{
-padding:15px;
-max-width:700px;
-margin:auto;
-}
-.card{
-background:#fff;
-padding:15px;
-border-radius:14px;
-margin-bottom:14px;
-box-shadow:0 2px 8px rgba(0,0,0,0.08);
-}
-input,select,button{
-width:100%;
-padding:12px;
-margin-top:8px;
-margin-bottom:10px;
-border-radius:10px;
-border:1px solid #ccc;
-font-size:16px;
-box-sizing:border-box;
-}
-button{
-background:#1976d2;
-color:#fff;
-border:none;
-font-weight:bold;
-}
-button.small{
-width:auto;
-padding:8px 12px;
-margin-right:8px;
-}
-.row{
-display:flex;
-gap:8px;
-}
-.row input{
-flex:1;
-}
-.hidden{
-display:none;
-}
-.list{
-padding:10px;
-border-bottom:1px solid #ddd;
-}
-.badge{
-display:inline-block;
-padding:4px 8px;
-border-radius:8px;
-font-size:12px;
-color:#fff;
-}
-.red{background:#e53935;}
-.green{background:#43a047;}
+body{margin:0;font-family:sans-serif;background:#f3f8ff}
+header{background:#1976d2;color:#fff;padding:15px;text-align:center;font-size:22px;font-weight:bold}
+.container{padding:15px;max-width:700px;margin:auto}
+.card{background:#fff;padding:15px;border-radius:14px;margin-bottom:14px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+input,button{width:100%;padding:12px;margin:6px 0;border-radius:10px;border:1px solid #ccc;box-sizing:border-box}
+button{background:#1976d2;color:#fff;border:none;font-weight:bold}
+.small{width:auto;padding:8px 10px;margin-right:6px}
+.hidden{display:none}
+.list{padding:10px;border-bottom:1px solid #ddd}
+.red{color:#e53935;font-weight:bold}
+.green{color:#43a047;font-weight:bold}
 </style>
 </head>
-
 <body>
 
 <header>集金管理くん</header>
 
 <div class="container">
 
-<!-- ログイン -->
 <div id="loginPage" class="card">
 <h3>ログイン</h3>
-<input id="loginId" placeholder="ID">
-<input id="loginPass" type="password" placeholder="パスワード">
+<input id="id" placeholder="ID">
+<input id="pw" type="password" placeholder="パスワード">
 <button onclick="login()">ログイン</button>
 </div>
 
-<!-- メイン -->
 <div id="mainPage" class="hidden">
 
 <div class="card">
-<h3 id="welcome"></h3>
-<button onclick="showPage('home')">ホーム</button>
-<button onclick="showPage('add')">新規納品</button>
-<button onclick="showPage('list')">一覧</button>
+<div id="welcome"></div>
+<button onclick="show('home')">ホーム</button>
+<button onclick="show('add')">登録</button>
+<button onclick="show('list')">一覧</button>
 <button onclick="logout()">ログアウト</button>
 </div>
 
-<!-- ホーム -->
 <div id="homePage" class="card">
 <h3>ホーム</h3>
 <div id="summary"></div>
 </div>
 
-<!-- 登録 -->
 <div id="addPage" class="card hidden">
-<h3>新規納品登録</h3>
-
+<h3>納品登録</h3>
 <input id="customer" placeholder="取引先名">
-
-<div id="items"></div>
-
-<button onclick="addItem()">＋商品追加</button>
-
 <input id="date" type="date">
-
-<div>合計: ¥<span id="total">0</span></div>
-
-<button onclick="saveData()">保存</button>
+<input id="total" type="number" placeholder="金額">
+<button onclick="save()">保存</button>
 </div>
 
-<!-- 一覧 -->
 <div id="listPage" class="card hidden">
-<h3>納品一覧</h3>
+<h3>一覧</h3>
 <div id="records"></div>
 </div>
 
-<!-- 管理者 -->
-<div id="adminPage" class="card hidden">
-<h3>管理者画面</h3>
-<div id="adminData"></div>
 </div>
-
-</div>
-
 </div>
 
 <script>
-const users = {
-tanaka:{pass:"1234",admin:false},
-sato:{pass:"1234",admin:false},
-suzuki:{pass:"1234",admin:false},
-yamamoto:{pass:"1234",admin:true}
+const users={
+tanaka:"1234",
+sato:"1234",
+suzuki:"1234",
+yamamoto:"1234"
 };
 
-let currentUser=null;
+let user="";
+let editIndex=-1;
 
 if(localStorage.getItem("loginUser")){
-currentUser=localStorage.getItem("loginUser");
-startApp();
+user=localStorage.getItem("loginUser");
+start();
 }
 
 function login(){
-let id=document.getElementById("loginId").value;
-let pw=document.getElementById("loginPass").value;
-
-if(users[id] && users[id].pass===pw){
-currentUser=id;
+let id=document.getElementById("id").value;
+let pw=document.getElementById("pw").value;
+if(users[id]===pw){
+user=id;
 localStorage.setItem("loginUser",id);
-startApp();
-}else{
-alert("ログイン失敗");
-}
+start();
+}else alert("ログイン失敗");
 }
 
 function logout(){
@@ -176,117 +93,119 @@ localStorage.removeItem("loginUser");
 location.reload();
 }
 
-function startApp(){
+function start(){
 document.getElementById("loginPage").classList.add("hidden");
 document.getElementById("mainPage").classList.remove("hidden");
-document.getElementById("welcome").innerText=currentUser+" さん";
+document.getElementById("welcome").innerHTML=user+" さん";
 document.getElementById("date").valueAsDate=new Date();
-
-if(users[currentUser].admin){
-document.getElementById("adminPage").classList.remove("hidden");
-}
-
 showSummary();
-addItem();
-loadRecords();
+load();
 }
 
-function showPage(p){
+function show(x){
 document.getElementById("homePage").classList.add("hidden");
 document.getElementById("addPage").classList.add("hidden");
 document.getElementById("listPage").classList.add("hidden");
 
-if(p=="home") document.getElementById("homePage").classList.remove("hidden");
-if(p=="add") document.getElementById("addPage").classList.remove("hidden");
-if(p=="list") document.getElementById("listPage").classList.remove("hidden");
+if(x=="home")document.getElementById("homePage").classList.remove("hidden");
+if(x=="add")document.getElementById("addPage").classList.remove("hidden");
+if(x=="list")document.getElementById("listPage").classList.remove("hidden");
 }
 
-function addItem(){
-let div=document.createElement("div");
-div.className="row";
-div.innerHTML=`
-<input placeholder="商品名" class="name">
-<input placeholder="数量" type="number" class="qty" oninput="calcTotal()">
-<input placeholder="単価" type="number" class="price" oninput="calcTotal()">
-`;
-document.getElementById("items").appendChild(div);
+function getData(){
+return JSON.parse(localStorage.getItem("records")||"[]");
 }
 
-function calcTotal(){
-let qty=document.querySelectorAll(".qty");
-let price=document.querySelectorAll(".price");
-let total=0;
-
-for(let i=0;i<qty.length;i++){
-total += (Number(qty[i].value)||0)*(Number(price[i].value)||0);
-}
-document.getElementById("total").innerText=total;
+function setData(d){
+localStorage.setItem("records",JSON.stringify(d));
 }
 
-function saveData(){
-let data=JSON.parse(localStorage.getItem("records")||"[]");
+function save(){
+let d=getData();
 
-data.push({
-user:currentUser,
-customer:document.getElementById("customer").value,
-date:document.getElementById("date").value,
-total:document.getElementById("total").innerText,
+let obj={
+user:user,
+customer:customer.value,
+date:date.value,
+total:Number(total.value),
 paid:false
-});
+};
 
-localStorage.setItem("records",JSON.stringify(data));
-
-alert("保存しました");
-
-location.reload();
+if(editIndex==-1){
+d.push(obj);
+}else{
+obj.paid=d[editIndex].paid;
+d[editIndex]=obj;
+editIndex=-1;
 }
 
-function loadRecords(){
-let data=JSON.parse(localStorage.getItem("records")||"[]");
+setData(d);
+customer.value="";
+total.value="";
+load();
+showSummary();
+show("list");
+}
+
+function load(){
+let d=getData();
 let area=document.getElementById("records");
 area.innerHTML="";
 
-data.forEach((r,i)=>{
-
-if(r.user===currentUser || users[currentUser].admin){
-
-area.innerHTML += `
+d.forEach((r,i)=>{
+if(r.user==user || user=="yamamoto"){
+area.innerHTML+=`
 <div class="list">
 ${r.date} / ${r.customer} / ¥${r.total}<br>
-担当:${r.user}<br>
-<span class="badge ${r.paid?'green':'red'}">
-${r.paid?'集金済':'未集金'}
-</span>
-<button class="small" onclick="togglePaid(${i})">切替</button>
+<span class="${r.paid?'green':'red'}">${r.paid?'集金済':'未集金'}</span><br>
+<button class="small" onclick="toggle(${i})">切替</button>
+<button class="small" onclick="editRec(${i})">編集</button>
+<button class="small" onclick="delRec(${i})">削除</button>
 </div>
 `;
 }
-
 });
-
-if(users[currentUser].admin){
-document.getElementById("adminData").innerHTML=
-"全件閲覧可能 / 登録件数："+data.length+"件";
-}
 }
 
-function togglePaid(i){
-let data=JSON.parse(localStorage.getItem("records")||"[]");
-data[i].paid=!data[i].paid;
-localStorage.setItem("records",JSON.stringify(data));
-loadRecords();
+function toggle(i){
+let d=getData();
+d[i].paid=!d[i].paid;
+setData(d);
+load();
+showSummary();
+}
+
+function editRec(i){
+let d=getData();
+customer.value=d[i].customer;
+date.value=d[i].date;
+total.value=d[i].total;
+editIndex=i;
+show("add");
+}
+
+function delRec(i){
+if(confirm("削除しますか？")){
+let d=getData();
+d.splice(i,1);
+setData(d);
+load();
+showSummary();
+}
 }
 
 function showSummary(){
-let data=JSON.parse(localStorage.getItem("records")||"[]");
+let d=getData().filter(x=>x.user==user || user=="yamamoto");
 
-let my=data.filter(x=>x.user===currentUser || users[currentUser].admin);
+let count=d.length;
+let unpaid=d.filter(x=>!x.paid).length;
+let remain=d.filter(x=>!x.paid).reduce((a,b)=>a+b.total,0);
 
-let unpaid=my.filter(x=>!x.paid).length;
-let total=my.reduce((a,b)=>a+Number(b.total),0);
-
-document.getElementById("summary").innerHTML=
-`件数:${my.length}件<br>未集金:${unpaid}件<br>売上合計:¥${total}`;
+summary.innerHTML=`
+件数：${count}件<br>
+未集金：${unpaid}件<br>
+売上残合計：¥${remain}
+`;
 }
 </script>
 
