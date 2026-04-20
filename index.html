@@ -20,6 +20,7 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold}
 .badge{padding:3px 8px;border-radius:8px;color:#fff;font-size:12px}
 .red{background:#e53935}
 .green{background:#43a047}
+.gray{background:#777}
 </style>
 
 </head>
@@ -46,7 +47,7 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold}
 <button onclick="show('home')">ホーム</button>
 <button onclick="show('add')">納品登録</button>
 <button onclick="show('list')">一覧</button>
-<button id="adminBtn" class="hidden" onclick="show('admin')">管理者</button>
+<button id="adminBtn" onclick="show('admin')" class="hidden">管理者</button>
 <button onclick="logout()">ログアウト</button>
 </div>
 
@@ -68,17 +69,12 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold}
 
 <div>合計：¥<span id="total">0</span></div>
 
-<button onclick="save()">登録</button>
+<button onclick="save()">保存</button>
 </div>
 
 <!-- LIST -->
 <div id="listPage" class="card hidden">
 <h3>一覧</h3>
-
-<button class="small" onclick="sortList('new')">新しい順</button>
-<button class="small" onclick="sortList('old')">古い順</button>
-<button class="small" onclick="sortList('az')">あいうえお順</button>
-
 <div id="records"></div>
 </div>
 
@@ -86,19 +82,29 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold}
 <div id="adminPage" class="card hidden">
 <h3>管理者ページ</h3>
 
-<h4>社員別売上残</h4>
-<div id="adminSummary"></div>
-
 <h4>社員管理</h4>
 <div id="userList"></div>
 
+<h4>社員追加</h4>
+<input id="newId" placeholder="ID">
+<input id="newName" placeholder="表示名">
+<input id="newPw" placeholder="パスワード">
+<button onclick="addUser()">追加</button>
+
+<hr>
+
+<h4>社員別売上残</h4>
+<div id="adminSummary"></div>
+
 </div>
 
 </div>
+
 </div>
 
 <script>
 
+/* ===== USERS ===== */
 let users = JSON.parse(localStorage.getItem("users")) || {
 arai:{pass:"1234",name:"新井",admin:false},
 hosoya:{pass:"1234",name:"細谷",admin:false},
@@ -108,14 +114,14 @@ yamamoto:{pass:"1234",name:"山本",admin:true}
 
 let currentUser=null;
 let editIndex=-1;
-let currentSort="new";
 
+/* ===== INIT LOGIN ===== */
 if(localStorage.getItem("loginUser")){
 currentUser=localStorage.getItem("loginUser");
 start();
 }
 
-/* LOGIN */
+/* ===== LOGIN ===== */
 function login(){
 let id=loginId.value;
 let pw=loginPw.value;
@@ -132,7 +138,7 @@ localStorage.removeItem("loginUser");
 location.reload();
 }
 
-/* START */
+/* ===== START ===== */
 function start(){
 loginPage.classList.add("hidden");
 mainPage.classList.remove("hidden");
@@ -143,14 +149,13 @@ adminBtn.classList.toggle("hidden",!users[currentUser].admin);
 
 date.valueAsDate=new Date();
 
-resetForm();
 addItem();
 load();
 summaryView();
-adminView();
+if(users[currentUser].admin) adminView();
 }
 
-/* NAV */
+/* ===== NAV ===== */
 function show(p){
 homePage.classList.add("hidden");
 addPage.classList.add("hidden");
@@ -163,7 +168,7 @@ if(p=="list")listPage.classList.remove("hidden");
 if(p=="admin")adminPage.classList.remove("hidden");
 }
 
-/* DATA */
+/* ===== DATA ===== */
 function getData(){
 return JSON.parse(localStorage.getItem("records")||"[]");
 }
@@ -171,7 +176,7 @@ function setData(d){
 localStorage.setItem("records",JSON.stringify(d));
 }
 
-/* ITEMS */
+/* ===== ITEMS ===== */
 function addItem(){
 let div=document.createElement("div");
 div.className="row";
@@ -189,34 +194,34 @@ let p=document.querySelectorAll(".p");
 let sum=0;
 
 for(let i=0;i<q.length;i++){
-sum+=(q[i].value||0)*(p[i].value||0);
+sum += (q[i].value||0)*(p[i].value||0);
 }
 
 total.innerText=sum;
 }
 
-/* SAVE */
+/* ===== SAVE ===== */
 function save(){
 let d=getData();
 
-let nodes=document.querySelectorAll("#items .row");
+let itemNodes=document.querySelectorAll("#items .row");
 
-let arr=[];
-nodes.forEach(r=>{
-arr.push({
+let itemsArr=[];
+itemNodes.forEach(r=>{
+itemsArr.push({
 name:r.querySelector(".n").value,
 qty:Number(r.querySelector(".q").value||0),
 price:Number(r.querySelector(".p").value||0)
 });
 });
 
-let totalVal=arr.reduce((a,b)=>a+b.qty*b.price,0);
+let totalVal=itemsArr.reduce((a,b)=>a+b.qty*b.price,0);
 
 let obj={
 user:currentUser,
 customer:customer.value,
 date:date.value,
-items:arr,
+items:itemsArr,
 total:totalVal,
 paid:false
 };
@@ -230,36 +235,14 @@ editIndex=-1;
 }
 
 setData(d);
-
-resetForm();
 load();
 summaryView();
 show("list");
 }
 
-/* RESET FORM */
-function resetForm(){
-customer.value="";
-date.valueAsDate=new Date();
-items.innerHTML="";
-total.innerText=0;
-editIndex=-1;
-}
-
-/* LIST */
+/* ===== LIST ===== */
 function load(){
 let d=getData();
-
-if(currentSort=="new"){
-d.sort((a,b)=>new Date(b.date)-new Date(a.date));
-}
-if(currentSort=="old"){
-d.sort((a,b)=>new Date(a.date)-new Date(b.date));
-}
-if(currentSort=="az"){
-d.sort((a,b)=>a.customer.localeCompare(b.customer,'ja'));
-}
-
 records.innerHTML="";
 
 d.forEach((r,i)=>{
@@ -280,13 +263,7 @@ ${r.date} / ${r.customer}<br>
 });
 }
 
-/* SORT */
-function sortList(type){
-currentSort=type;
-load();
-}
-
-/* ACTION */
+/* ===== ACTION ===== */
 function toggle(i){
 let d=getData();
 d[i].paid=!d[i].paid;
@@ -309,7 +286,6 @@ adminView();
 
 function edit(i){
 let d=getData()[i];
-
 customer.value=d.customer;
 date.value=d.date;
 
@@ -330,21 +306,22 @@ calc();
 show("add");
 }
 
-/* SUMMARY */
+/* ===== SUMMARY USER ===== */
 function summaryView(){
 let d=getData().filter(x=>x.user==currentUser);
 
-let unpaid=d.filter(x=>!x.paid)
-.reduce((a,b)=>a+b.total,0);
+let count=d.length;
+let unpaid=d.filter(x=>!x.paid).length;
+let remain=d.filter(x=>!x.paid).reduce((a,b)=>a+b.total,0);
 
 summary.innerHTML=`
-件数：${d.length}<br>
-未集金：${d.filter(x=>!x.paid).length}<br>
-売上残合計：¥${unpaid}
+件数：${count}<br>
+未集金：${unpaid}<br>
+売上残合計：¥${remain}
 `;
 }
 
-/* ADMIN */
+/* ===== ADMIN ===== */
 function adminView(){
 if(!users[currentUser].admin) return;
 
@@ -355,8 +332,8 @@ let html="<h4>社員別売上残</h4>";
 Object.keys(users).forEach(u=>{
 if(users[u].admin) return;
 
-let remain=d.filter(x=>x.user==u && !x.paid)
-.reduce((a,b)=>a+b.total,0);
+let ud=d.filter(x=>x.user==u);
+let remain=ud.filter(x=>!x.paid).reduce((a,b)=>a+b.total,0);
 
 html+=`${users[u].name}：¥${remain}<br>`;
 });
@@ -365,19 +342,20 @@ adminSummary.innerHTML=html;
 
 /* user list */
 userList.innerHTML="";
-
 Object.keys(users).forEach(u=>{
+
 userList.innerHTML+=`
 <div class="list">
 ID:${u}<br>
 名前:${users[u].name}<br>
+
 <button class="small" onclick="delUser('${u}')">削除</button>
 </div>
 `;
 });
 }
 
-/* USER */
+/* ===== USER ADD ===== */
 function addUser(){
 users[newId.value]={
 pass:newPw.value,
@@ -389,8 +367,9 @@ localStorage.setItem("users",JSON.stringify(users));
 adminView();
 }
 
+/* ===== USER DELETE ===== */
 function delUser(id){
-if(id=="yamamoto")return alert("削除不可");
+if(id=="yamamoto") return alert("削除不可");
 
 delete users[id];
 localStorage.setItem("users",JSON.stringify(users));
