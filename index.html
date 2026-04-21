@@ -21,6 +21,8 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold}
 .red{background:#e53935}
 .green{background:#43a047}
 .gray{background:#777}
+.admin-summary-top{background:#e3f2fd;border-radius:10px;padding:12px;margin-bottom:10px}
+.admin-summary-top h4{margin:0 0 8px 0;color:#1976d2}
 </style>
 
 </head>
@@ -44,15 +46,17 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold}
 
 <div class="card">
 <div id="welcome"></div>
-<button onclick="show('home')">ホーム</button>
+<!-- 管理者用ナビ（adminBtnNav）: 管理者のみ表示、先頭に配置 -->
+<button id="adminBtnNav" onclick="show('admin')" class="hidden">管理者</button>
+<!-- 通常ユーザー用ホームボタン（管理者には非表示） -->
+<button id="homeBtn" onclick="show('home')">ホーム</button>
 <button onclick="show('add')">納品登録</button>
 <button onclick="show('list')">一覧</button>
-<button id="adminBtn" onclick="show('admin')" class="hidden">管理者</button>
 <button onclick="logout()">ログアウト</button>
 </div>
 
-<!-- HOME -->
-<div id="homePage" class="card">
+<!-- HOME（一般社員のみ） -->
+<div id="homePage" class="card hidden">
 <h3>ホーム</h3>
 <div id="summary"></div>
 </div>
@@ -82,6 +86,12 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold}
 <div id="adminPage" class="card hidden">
 <h3>管理者ページ</h3>
 
+<!-- 社員別売上残を最上部に表示 -->
+<div class="admin-summary-top">
+<h4>社員別売上残</h4>
+<div id="adminSummaryTop"></div>
+</div>
+
 <h4>社員管理</h4>
 <div id="userList"></div>
 
@@ -90,11 +100,6 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold}
 <input id="newName" placeholder="表示名">
 <input id="newPw" placeholder="パスワード">
 <button onclick="addUser()">追加</button>
-
-<hr>
-
-<h4>社員別売上残</h4>
-<div id="adminSummary"></div>
 
 </div>
 
@@ -145,14 +150,38 @@ mainPage.classList.remove("hidden");
 
 welcome.innerHTML=users[currentUser].name+" さん";
 
-adminBtn.classList.toggle("hidden",!users[currentUser].admin);
+let isAdmin=users[currentUser].admin;
 
-date.valueAsDate=new Date();
+// 管理者：管理者ボタンを表示、ホームボタンを非表示
+adminBtnNav.classList.toggle("hidden",!isAdmin);
+homeBtn.classList.toggle("hidden",isAdmin);
 
-addItem();
+resetAddForm();
 load();
-summaryView();
-if(users[currentUser].admin) adminView();
+
+if(isAdmin){
+  adminView();
+  show("admin"); // 管理者はデフォルトで管理者ページを表示
+}else{
+  summaryView();
+  show("home"); // 一般社員はホームを表示
+}
+}
+
+/* ===== RESET ADD FORM ===== */
+function resetAddForm(){
+customer.value="";
+// 今日の日付を自動セット
+let today=new Date();
+let yyyy=today.getFullYear();
+let mm=String(today.getMonth()+1).padStart(2,"0");
+let dd=String(today.getDate()).padStart(2,"0");
+date.value=yyyy+"-"+mm+"-"+dd;
+
+items.innerHTML="";
+total.innerText="0";
+editIndex=-1;
+addItem();
 }
 
 /* ===== NAV ===== */
@@ -231,12 +260,16 @@ d.push(obj);
 }else{
 obj.paid=d[editIndex].paid;
 d[editIndex]=obj;
-editIndex=-1;
 }
 
 setData(d);
 load();
 summaryView();
+if(users[currentUser].admin) adminView();
+
+// 保存後にフォームをリセット
+resetAddForm();
+
 show("list");
 }
 
@@ -270,7 +303,7 @@ d[i].paid=!d[i].paid;
 setData(d);
 load();
 summaryView();
-adminView();
+if(users[currentUser].admin) adminView();
 }
 
 function del(i){
@@ -280,7 +313,7 @@ d.splice(i,1);
 setData(d);
 load();
 summaryView();
-adminView();
+if(users[currentUser].admin) adminView();
 }
 }
 
@@ -308,6 +341,7 @@ show("add");
 
 /* ===== SUMMARY USER ===== */
 function summaryView(){
+if(users[currentUser].admin) return;
 let d=getData().filter(x=>x.user==currentUser);
 
 let count=d.length;
@@ -327,8 +361,8 @@ if(!users[currentUser].admin) return;
 
 let d=getData();
 
-let html="<h4>社員別売上残</h4>";
-
+// 社員別売上残（最上部）
+let html="";
 Object.keys(users).forEach(u=>{
 if(users[u].admin) return;
 
@@ -338,7 +372,7 @@ let remain=ud.filter(x=>!x.paid).reduce((a,b)=>a+b.total,0);
 html+=`${users[u].name}：¥${remain}<br>`;
 });
 
-adminSummary.innerHTML=html;
+adminSummaryTop.innerHTML=html;
 
 /* user list */
 userList.innerHTML="";
@@ -346,9 +380,7 @@ Object.keys(users).forEach(u=>{
 
 userList.innerHTML+=`
 <div class="list">
-ID:${u}<br>
-名前:${users[u].name}<br>
-
+ID:${u}　名前:${users[u].name}　${users[u].admin?'[管理者]':''}<br>
 <button class="small" onclick="delUser('${u}')">削除</button>
 </div>
 `;
@@ -357,6 +389,10 @@ ID:${u}<br>
 
 /* ===== USER ADD ===== */
 function addUser(){
+if(!newId.value || !newName.value || !newPw.value){
+alert("全項目を入力してください");
+return;
+}
 users[newId.value]={
 pass:newPw.value,
 name:newName.value,
@@ -364,12 +400,16 @@ admin:false
 };
 
 localStorage.setItem("users",JSON.stringify(users));
+newId.value="";
+newName.value="";
+newPw.value="";
 adminView();
 }
 
 /* ===== USER DELETE ===== */
 function delUser(id){
 if(id=="yamamoto") return alert("削除不可");
+if(!confirm(users[id].name+"を削除しますか？")) return;
 
 delete users[id];
 localStorage.setItem("users",JSON.stringify(users));
