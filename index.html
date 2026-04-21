@@ -407,13 +407,17 @@ function load(){
   records.innerHTML="";
   if(visible.length===0){ records.innerHTML='<div style="color:#999;padding:10px">該当する記録がありません</div>'; return; }
   visible.forEach(({r,i})=>{
-    let memoHtml=r.memo?`<div class="memo-text">📝 ${r.memo}</div>`:"";
     let userLabel=users[currentUser].admin?`<span style="font-size:12px;color:#888">${users[r.user]?.name||r.user}</span><br>`:"";
+    // 商品名先頭4文字
+    let firstName = (r.items && r.items[0] && r.items[0].name) ? r.items[0].name.slice(0,4) : "";
+    // メモ先頭6文字
+    let memoShort = (r.memo && r.memo.trim()) ? r.memo.trim().slice(0,6) : "";
+    let memoSpan  = memoShort ? `<span style="font-size:12px;color:#888;margin-left:6px">${memoShort}</span>` : "";
     records.innerHTML+=`
       <div class="list">
-        ${userLabel}${r.date} / ${r.customer}<br>¥${r.total}<br>
-        <span class="badge ${r.paid?'green':'red'}">${r.paid?'集金済':'未集金'}</span>
-        ${memoHtml}<br>
+        ${userLabel}${r.date} / ${r.customer}<br>
+        <span style="font-size:12px;color:#555;margin-right:6px">${firstName}</span>¥${r.total}${memoSpan}<br>
+        <span class="badge ${r.paid?'green':'red'}">${r.paid?'集金済':'未集金'}</span><br>
         <button class="small" onclick="toggle(${i})">切替</button>
         <button class="small" onclick="edit(${i})">編集</button>
         <button class="small" onclick="del(${i})">削除</button>
