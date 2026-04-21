@@ -527,12 +527,7 @@ window.importBackup = async function(event){
     try {
       let backup=JSON.parse(e.target.result);
       if(!backup.records||!backup.users){ alert("形式が正しくありません"); return; }
-      if(!confirm("バックアップから復元します。
-
-・売上記録："+backup.records.length+"件
-・社員数："+Object.keys(backup.users).length+"名
-
-現在のデータは上書きされます。よろしいですか？"))
+      if(!confirm("バックアップから復元します。\n\n・売上記録："+backup.records.length+"件\n・社員数："+Object.keys(backup.users).length+"名\n\n現在のデータは上書きされます。よろしいですか？"))
         { document.getElementById("importFile").value=""; return; }
       showLoading("復元中…");
       try {
