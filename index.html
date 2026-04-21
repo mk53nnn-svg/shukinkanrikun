@@ -116,8 +116,8 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
 
 
 <div style="display:flex;gap:6px;margin-bottom:4px">
-  <input id="searchBox" type="search" placeholder="🔍 取引先・商品名で検索" style="margin:0" onkeydown="if(event.key==='Enter')load()">
-  <button onclick="load()" style="width:auto;padding:10px 16px;margin:0;white-space:nowrap">検索</button>
+  <input id="searchBox" type="search" placeholder="🔍 取引先・商品名で検索" style="margin:0" onkeydown="if(event.key==='Enter'){this.blur();doSearch();}">
+  <button onclick="doSearch()" style="width:auto;padding:10px 16px;margin:0;white-space:nowrap">検索</button>
 </div>
 
 <div class="section-label">絞り込み</div>
@@ -389,6 +389,12 @@ function buildStaffFilter(){
   bar.innerHTML=html;
 }
 window.setStaff = function(u){ currentStaff=u; buildStaffFilter(); load(); };
+
+window.doSearch = function(){
+  // キーボードを確実に閉じてからload
+  document.getElementById("searchBox").blur();
+  setTimeout(load, 100);
+};
 
 /* ===== SORT ===== */
 window.setSort = function(s){
