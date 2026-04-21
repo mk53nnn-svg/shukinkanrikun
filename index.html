@@ -193,7 +193,7 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, set, get, onValue, push, remove, update }
+import { getDatabase, ref, set, get, onValue, push, remove }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 /* ===== FIREBASE CONFIG ===== */
@@ -210,23 +210,22 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db  = getDatabase(app);
 
-/* ===== USERS ===== */
+/* ===== STATE ===== */
 let users = {
   arai:    {pass:"1234", name:"新井",  admin:false},
   hosoya:  {pass:"1234", name:"細谷",  admin:false},
   ikeda:   {pass:"1234", name:"池田",  admin:false},
   yamamoto:{pass:"1234", name:"山本",  admin:true}
 };
-
 let currentUser   = null;
 let editIndex     = -1;
 let currentSort   = "new";
 let abcDir        = 1;
 let currentFilter = "all";
 let currentStaff  = "all";
-let recordsCache  = [];   // Firebaseから取得したレコードのキャッシュ
+let recordsCache  = [];
 
-/* ===== LOADING UI ===== */
+/* ===== LOADING ===== */
 function showLoading(msg="読み込み中…"){
   document.getElementById("loadingMsg").textContent = msg;
   document.getElementById("loadingOverlay").classList.remove("hidden");
@@ -238,475 +237,339 @@ function hideLoading(){
 /* ===== FIREBASE: USERS ===== */
 async function loadUsers(){
   const snap = await get(ref(db,"users"));
-  if(snap.exists()){
-    users = snap.val();
-  } else {
-    // 初回：デフォルトユーザーをFirebaseに書き込む
-    await set(ref(db,"users"), users);
-  }
+  if(snap.exists()){ users = snap.val(); }
+  else { await set(ref(db,"users"), users); }
 }
-
-async function saveUsers(){
-  await set(ref(db,"users"), users);
-}
+async function saveUsers(){ await set(ref(db,"users"), users); }
 
 /* ===== FIREBASE: RECORDS ===== */
 function listenRecords(){
-  // リアルタイム同期：データが変わったら自動的に画面を更新
   onValue(ref(db,"records"), (snap)=>{
     if(snap.exists()){
       let obj = snap.val();
-      // objectをindexつき配列に変換
-      recordsCache = Object.keys(obj).map(k=>({ _key:k, ...obj[k] }));
-    } else {
-      recordsCache = [];
-    }
-    if(currentUser){
-      load();
-      summaryView();
-      if(users[currentUser] && users[currentUser].admin) adminView();
-    }
+      recordsCache = Object.keys(obj).map(k=>({_key:k,...obj[k]}));
+    } else { recordsCache = []; }
+    if(currentUser){ load(); summaryView(); if(users[currentUser]?.admin) adminView(); }
   });
 }
-
 function getData(){ return recordsCache; }
-
-async function pushRecord(obj){
-  const newRef = push(ref(db,"records"));
-  await set(newRef, obj);
-}
-
-async function updateRecord(key, obj){
-  await set(ref(db,"records/"+key), obj);
-}
-
-async function deleteRecord(key){
-  await remove(ref(db,"records/"+key));
-}
+async function pushRecord(obj)  { const r=push(ref(db,"records")); await set(r,obj); }
+async function updateRecord(k,obj){ await set(ref(db,"records/"+k),obj); }
+async function deleteRecord(k)  { await remove(ref(db,"records/"+k)); }
 
 /* ===== INIT ===== */
 (async ()=>{
   showLoading("起動中…");
-  await loadUsers();
-  // セッション復元
+  try { await loadUsers(); } catch(e){ console.error(e); }
+  listenRecords();
   let saved = localStorage.getItem("loginUser");
-  if(saved && users[saved]){
-    currentUser = saved;
-    listenRecords();
-    hideLoading();
-    start();
-  } else {
-    hideLoading();
-    listenRecords();
-  }
+  if(saved && users[saved]){ currentUser=saved; start(); }
+  hideLoading();
 })();
 
 /* ===== LOGIN ===== */
-function login(){
-  let id = loginId.value, pw = loginPw.value;
-  if(users[id] && users[id].pass === pw){
-    currentUser = id;
-    localStorage.setItem("loginUser", id);
+window.login = function(){
+  let id=loginId.value.trim(), pw=loginPw.value;
+  if(users[id] && users[id].pass===pw){
+    currentUser=id;
+    localStorage.setItem("loginUser",id);
     start();
   } else alert("ログイン失敗");
-}
+};
 
-function logout(){
+window.logout = function(){
   localStorage.removeItem("loginUser");
-  currentUser = null;
+  currentUser=null;
   location.reload();
-}
+};
 
 /* ===== START ===== */
 function start(){
   loginPage.classList.add("hidden");
   mainPage.classList.remove("hidden");
-  welcome.innerHTML = users[currentUser].name + " さん";
-
+  welcome.innerHTML = users[currentUser].name+" さん";
   let isAdmin = users[currentUser].admin;
-  adminBtnNav.classList.toggle("hidden", !isAdmin);
-  homeBtn.classList.toggle("hidden", isAdmin);
-
+  adminBtnNav.classList.toggle("hidden",!isAdmin);
+  homeBtn.classList.toggle("hidden",isAdmin);
   resetAddForm();
   load();
-
   if(isAdmin){ adminView(); buildStaffFilter(); show("admin"); }
   else { summaryView(); show("home"); }
 }
 
 /* ===== RESET FORM ===== */
 function resetAddForm(){
-  customer.value = "";
-  memo.value     = "";
-  let t = new Date();
-  date.value = t.getFullYear() + "-"
-    + String(t.getMonth()+1).padStart(2,"0") + "-"
-    + String(t.getDate()).padStart(2,"0");
-  items.innerHTML = "";
-  total.innerText = "0";
-  editIndex = -1;
-  addItem();
+  customer.value=""; memo.value="";
+  let t=new Date();
+  date.value=t.getFullYear()+"-"+String(t.getMonth()+1).padStart(2,"0")+"-"+String(t.getDate()).padStart(2,"0");
+  items.innerHTML=""; total.innerText="0";
+  editIndex=-1; addItem();
 }
 
 /* ===== NAV ===== */
-function show(p){
+window.show = function(p){
   ["homePage","addPage","listPage","adminPage"].forEach(id=>{
     document.getElementById(id).classList.add("hidden");
   });
   document.getElementById(p+"Page").classList.remove("hidden");
-}
-
-function showAdd(){
-  resetAddForm();
-  show("add");
-}
+};
+window.showAdd = function(){ resetAddForm(); show("add"); };
 
 /* ===== ITEMS ===== */
-function addItem(){
-  let div = document.createElement("div");
-  div.className = "row";
-  div.innerHTML = `
+window.addItem = function(){
+  let div=document.createElement("div");
+  div.className="row";
+  div.innerHTML=`
     <input placeholder="商品名" class="n">
     <input placeholder="数量" type="number" class="q" oninput="calc()">
     <input placeholder="単価" type="number" class="p" oninput="calc()">
   `;
   items.appendChild(div);
-}
-
-function calc(){
-  let qs = document.querySelectorAll(".q");
-  let ps = document.querySelectorAll(".p");
-  let sum = 0;
-  for(let i=0;i<qs.length;i++) sum += (qs[i].value||0)*(ps[i].value||0);
-  total.innerText = sum;
-}
+};
+window.calc = function(){
+  let qs=document.querySelectorAll(".q"), ps=document.querySelectorAll(".p"), sum=0;
+  for(let i=0;i<qs.length;i++) sum+=(qs[i].value||0)*(ps[i].value||0);
+  total.innerText=sum;
+};
 
 /* ===== SAVE ===== */
-async function save(){
-  let itemsArr = [];
+window.save = async function(){
+  let itemsArr=[];
   document.querySelectorAll("#items .row").forEach(r=>{
-    itemsArr.push({
-      name:  r.querySelector(".n").value,
-      qty:   Number(r.querySelector(".q").value||0),
-      price: Number(r.querySelector(".p").value||0)
-    });
+    itemsArr.push({name:r.querySelector(".n").value,qty:Number(r.querySelector(".q").value||0),price:Number(r.querySelector(".p").value||0)});
   });
-  let totalVal = itemsArr.reduce((a,b)=>a+b.qty*b.price, 0);
-  let obj = {
-    user:     currentUser,
-    customer: customer.value,
-    date:     date.value,
-    items:    itemsArr,
-    total:    totalVal,
-    memo:     memo.value,
-    paid:     false
-  };
-
+  let totalVal=itemsArr.reduce((a,b)=>a+b.qty*b.price,0);
+  let obj={user:currentUser,customer:customer.value,date:date.value,items:itemsArr,total:totalVal,memo:memo.value,paid:false};
   showLoading("保存中…");
   try {
-    if(editIndex === -1){
-      await pushRecord(obj);
-    } else {
-      let key = recordsCache[editIndex]._key;
-      obj.paid = recordsCache[editIndex].paid;
-      await updateRecord(key, obj);
-    }
-  } finally {
-    hideLoading();
-  }
-
-  resetAddForm();
-  show("list");
-}
+    if(editIndex===-1){ await pushRecord(obj); }
+    else { let k=recordsCache[editIndex]._key; obj.paid=recordsCache[editIndex].paid; await updateRecord(k,obj); }
+  } finally { hideLoading(); }
+  resetAddForm(); show("list");
+};
 
 /* ===== FILTER ===== */
-function setFilter(f){
-  currentFilter = f;
-  ["all","unpaid","paid"].forEach(k=>{
-    document.getElementById("f-"+k).classList.toggle("active", k===f);
-  });
+window.setFilter = function(f){
+  currentFilter=f;
+  ["all","unpaid","paid"].forEach(k=>document.getElementById("f-"+k).classList.toggle("active",k===f));
   load();
-}
+};
 
 /* ===== STAFF FILTER ===== */
 function buildStaffFilter(){
-  if(!currentUser || !users[currentUser] || !users[currentUser].admin) return;
-  let bar  = document.getElementById("staffFilterBar");
-  let wrap = document.getElementById("staffFilterWrap");
-  if(!bar || !wrap) return;
+  if(!currentUser||!users[currentUser]?.admin) return;
+  let bar=document.getElementById("staffFilterBar"), wrap=document.getElementById("staffFilterWrap");
+  if(!bar||!wrap) return;
   wrap.classList.remove("hidden");
-
-  let html = `<button id="sf-all" onclick="setStaff('all')" class="${currentStaff==='all'?'active':''}">全員</button>`;
+  let html=`<button id="sf-all" onclick="setStaff('all')" class="${currentStaff==='all'?'active':''}">全員</button>`;
   Object.keys(users).forEach(u=>{
     if(users[u].admin) return;
-    let active = currentStaff === u ? "active" : "";
-    html += `<button id="sf-${u}" onclick="setStaff('${u}')" class="${active}">${users[u].name}</button>`;
+    html+=`<button id="sf-${u}" onclick="setStaff('${u}')" class="${currentStaff===u?'active':''}">${users[u].name}</button>`;
   });
-  bar.innerHTML = html;
+  bar.innerHTML=html;
 }
-
-function setStaff(u){
-  currentStaff = u;
-  buildStaffFilter();
-  load();
-}
+window.setStaff = function(u){ currentStaff=u; buildStaffFilter(); load(); };
 
 /* ===== SORT ===== */
-function setSort(s){
-  if(s === "abc") abcDir = (currentSort === "abc") ? abcDir*-1 : 1;
-  currentSort = s;
-  ["new","old","abc"].forEach(k=>{
-    document.getElementById("s-"+k).classList.toggle("active", k===s);
-  });
-  let abcBtn = document.getElementById("s-abc");
-  if(s === "abc"){
-    abcBtn.textContent = abcDir===1 ? "あいうえお順 ▲" : "ん〜あ順 ▼";
-  } else {
-    abcBtn.textContent = "あいうえお順";
-  }
+window.setSort = function(s){
+  if(s==="abc") abcDir=(currentSort==="abc")?abcDir*-1:1;
+  currentSort=s;
+  ["new","old","abc"].forEach(k=>document.getElementById("s-"+k).classList.toggle("active",k===s));
+  let btn=document.getElementById("s-abc");
+  btn.textContent = s==="abc" ? (abcDir===1?"あいうえお順 ▲":"ん〜あ順 ▼") : "あいうえお順";
   load();
-}
+};
 
 /* ===== LOAD LIST ===== */
 function load(){
   if(!currentUser) return;
-  let d = getData();
-
-  let visible = d.map((r,i)=>({r,i})).filter(({r})=>{
-    return r.user === currentUser || users[currentUser].admin;
-  });
-
-  if(currentFilter === "unpaid") visible = visible.filter(({r})=>!r.paid);
-  if(currentFilter === "paid")   visible = visible.filter(({r})=>r.paid);
-  if(users[currentUser].admin && currentStaff !== "all")
-    visible = visible.filter(({r})=>r.user===currentStaff);
-
+  let d=getData();
+  let visible=d.map((r,i)=>({r,i})).filter(({r})=>r.user===currentUser||users[currentUser].admin);
+  if(currentFilter==="unpaid") visible=visible.filter(({r})=>!r.paid);
+  if(currentFilter==="paid")   visible=visible.filter(({r})=>r.paid);
+  if(users[currentUser].admin&&currentStaff!=="all") visible=visible.filter(({r})=>r.user===currentStaff);
   visible.sort((a,b)=>{
-    if(currentSort === "new") return (b.r.date||"").localeCompare(a.r.date||"");
-    if(currentSort === "old") return (a.r.date||"").localeCompare(b.r.date||"");
-    if(currentSort === "abc") return (a.r.customer||"").localeCompare(b.r.customer||"","ja")*abcDir;
+    if(currentSort==="new") return (b.r.date||"").localeCompare(a.r.date||"");
+    if(currentSort==="old") return (a.r.date||"").localeCompare(b.r.date||"");
+    if(currentSort==="abc") return (a.r.customer||"").localeCompare(b.r.customer||"","ja")*abcDir;
   });
-
-  records.innerHTML = "";
-  if(visible.length === 0){
-    records.innerHTML = '<div style="color:#999;padding:10px">該当する記録がありません</div>';
-    return;
-  }
-
+  records.innerHTML="";
+  if(visible.length===0){ records.innerHTML='<div style="color:#999;padding:10px">該当する記録がありません</div>'; return; }
   visible.forEach(({r,i})=>{
-    let memoHtml  = r.memo ? `<div class="memo-text">📝 ${r.memo}</div>` : "";
-    let userLabel = users[currentUser].admin
-      ? `<span style="font-size:12px;color:#888">${users[r.user]?.name||r.user}</span><br>`
-      : "";
-    records.innerHTML += `
+    let memoHtml=r.memo?`<div class="memo-text">📝 ${r.memo}</div>`:"";
+    let userLabel=users[currentUser].admin?`<span style="font-size:12px;color:#888">${users[r.user]?.name||r.user}</span><br>`:"";
+    records.innerHTML+=`
       <div class="list">
-        ${userLabel}
-        ${r.date} / ${r.customer}<br>
-        ¥${r.total}<br>
+        ${userLabel}${r.date} / ${r.customer}<br>¥${r.total}<br>
         <span class="badge ${r.paid?'green':'red'}">${r.paid?'集金済':'未集金'}</span>
         ${memoHtml}<br>
         <button class="small" onclick="toggle(${i})">切替</button>
         <button class="small" onclick="edit(${i})">編集</button>
         <button class="small" onclick="del(${i})">削除</button>
-      </div>
-    `;
+      </div>`;
   });
 }
 
 /* ===== ACTIONS ===== */
-async function toggle(i){
-  let r = recordsCache[i];
-  showLoading("更新中…");
-  try {
-    await updateRecord(r._key, {...r, paid:!r.paid});
-  } finally { hideLoading(); }
-}
-
-async function del(i){
+window.toggle = async function(i){
+  let r=recordsCache[i]; showLoading("更新中…");
+  try { await updateRecord(r._key,{...r,paid:!r.paid}); } finally { hideLoading(); }
+};
+window.del = async function(i){
   if(!confirm("削除しますか？")) return;
-  let r = recordsCache[i];
-  showLoading("削除中…");
-  try {
-    await deleteRecord(r._key);
-  } finally { hideLoading(); }
-}
-
-function edit(i){
-  let r = recordsCache[i];
-  customer.value = r.customer;
-  date.value     = r.date;
-  memo.value     = r.memo || "";
-  items.innerHTML = "";
+  let r=recordsCache[i]; showLoading("削除中…");
+  try { await deleteRecord(r._key); } finally { hideLoading(); }
+};
+window.edit = function(i){
+  let r=recordsCache[i];
+  customer.value=r.customer; date.value=r.date; memo.value=r.memo||"";
+  items.innerHTML="";
   r.items.forEach(it=>{
-    let div = document.createElement("div");
-    div.className = "row";
-    div.innerHTML = `
-      <input class="n" value="${it.name}">
-      <input class="q" value="${it.qty}"   type="number" oninput="calc()">
-      <input class="p" value="${it.price}" type="number" oninput="calc()">
-    `;
+    let div=document.createElement("div"); div.className="row";
+    div.innerHTML=`<input class="n" value="${it.name}"><input class="q" value="${it.qty}" type="number" oninput="calc()"><input class="p" value="${it.price}" type="number" oninput="calc()">`;
     items.appendChild(div);
   });
-  editIndex = i;
-  calc();
-  show("add");
-}
+  editIndex=i; calc(); show("add");
+};
 
 /* ===== SUMMARY ===== */
 function summaryView(){
-  if(!currentUser || users[currentUser].admin) return;
-  let d = getData().filter(x=>x.user===currentUser);
-  let remain = d.filter(x=>!x.paid).reduce((a,b)=>a+b.total,0);
-  summary.innerHTML = `件数：${d.length}<br>未集金：${d.filter(x=>!x.paid).length}<br>売上残合計：¥${remain}`;
+  if(!currentUser||users[currentUser].admin) return;
+  let d=getData().filter(x=>x.user===currentUser);
+  let remain=d.filter(x=>!x.paid).reduce((a,b)=>a+b.total,0);
+  summary.innerHTML=`件数：${d.length}<br>未集金：${d.filter(x=>!x.paid).length}<br>売上残合計：¥${remain}`;
 }
 
 /* ===== ADMIN ===== */
 function adminView(){
-  if(!currentUser || !users[currentUser] || !users[currentUser].admin) return;
-  let d = getData();
-
-  let html = "";
+  if(!currentUser||!users[currentUser]?.admin) return;
+  let d=getData(), html="";
   Object.keys(users).forEach(u=>{
     if(users[u].admin) return;
-    let remain = d.filter(x=>x.user===u && !x.paid).reduce((a,b)=>a+b.total,0);
-    html += `${users[u].name}：¥${remain}<br>`;
+    let remain=d.filter(x=>x.user===u&&!x.paid).reduce((a,b)=>a+b.total,0);
+    html+=`${users[u].name}：¥${remain}<br>`;
   });
-  adminSummaryTop.innerHTML = html;
-  buildStaffFilter();
-  updateBackupTime();
-
-  userList.innerHTML = "";
+  adminSummaryTop.innerHTML=html;
+  buildStaffFilter(); updateBackupTime();
+  userList.innerHTML="";
   Object.keys(users).forEach(u=>{
-    userList.innerHTML += `
+    userList.innerHTML+=`
       <div class="list" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">
         <div>ID:${u}　名前:${users[u].name}　${users[u].admin?'<span style="color:#1976d2;font-size:12px">[管理者]</span>':''}</div>
         <div>
           <button class="small" onclick="openEditUserModal('${u}')">編集</button>
           <button class="small" onclick="delUser('${u}')">削除</button>
         </div>
-      </div>
-    `;
+      </div>`;
   });
 }
 
 /* ===== USER ADD / DEL ===== */
-async function addUser(){
+window.addUser = async function(){
   if(!newId.value||!newName.value||!newPw.value){ alert("全項目を入力してください"); return; }
-  users[newId.value] = {pass:newPw.value, name:newName.value, admin:false};
-  showLoading("保存中…");
-  try { await saveUsers(); } finally { hideLoading(); }
-  newId.value = newName.value = newPw.value = "";
-  adminView();
-}
-
-async function delUser(id){
+  users[newId.value]={pass:newPw.value,name:newName.value,admin:false};
+  showLoading("保存中…"); try { await saveUsers(); } finally { hideLoading(); }
+  newId.value=newName.value=newPw.value=""; adminView();
+};
+window.delUser = async function(id){
   if(id==="yamamoto") return alert("削除不可");
   if(!confirm(users[id].name+"を削除しますか？")) return;
   delete users[id];
-  showLoading("削除中…");
-  try { await saveUsers(); } finally { hideLoading(); }
+  showLoading("削除中…"); try { await saveUsers(); } finally { hideLoading(); }
   adminView();
-}
+};
 
 /* ===== USER EDIT MODAL ===== */
-function openEditUserModal(id){
-  editUserId.value   = id;
-  editUserName.value = users[id].name;
-  editUserPw.value   = users[id].pass;
+window.openEditUserModal = function(id){
+  editUserId.value=id; editUserName.value=users[id].name; editUserPw.value=users[id].pass;
   editUserModal.classList.remove("hidden");
-}
-
-function closeEditUserModal(){
-  editUserModal.classList.add("hidden");
-}
-
-async function saveEditUser(){
-  let id = editUserId.value;
-  if(!editUserName.value || !editUserPw.value){
-    alert("名前とパスワードを入力してください");
-    return;
-  }
-  users[id].name = editUserName.value;
-  users[id].pass = editUserPw.value;
-  showLoading("保存中…");
-  try { await saveUsers(); } finally { hideLoading(); }
-  closeEditUserModal();
-  adminView();
-  alert(users[id].name + " の情報を更新しました");
-}
+};
+window.closeEditUserModal = function(){ editUserModal.classList.add("hidden"); };
+window.saveEditUser = async function(){
+  let id=editUserId.value;
+  if(!editUserName.value||!editUserPw.value){ alert("名前とパスワードを入力してください"); return; }
+  users[id].name=editUserName.value; users[id].pass=editUserPw.value;
+  showLoading("保存中…"); try { await saveUsers(); } finally { hideLoading(); }
+  closeEditUserModal(); adminView();
+  alert(users[id].name+" の情報を更新しました");
+};
 
 /* ===== BACKUP / RESTORE ===== */
-function exportBackup(){
-  let backup = {
-    version: 2,
-    exportedAt: new Date().toISOString(),
-    records: recordsCache,
-    users: users
-  };
-  let json = JSON.stringify(backup, null, 2);
-  let blob = new Blob([json], {type:"application/json"});
-  let url  = URL.createObjectURL(blob);
-  let now  = new Date();
-  let name = "集金管理_backup_"
-    + now.getFullYear()
-    + String(now.getMonth()+1).padStart(2,"0")
-    + String(now.getDate()).padStart(2,"0") + ".json";
-  let a = document.createElement("a");
-  a.href=url; a.download=name; a.click();
+window.exportBackup = function(){
+  let backup={version:2,exportedAt:new Date().toISOString(),records:recordsCache,users:users};
+  let blob=new Blob([JSON.stringify(backup,null,2)],{type:"application/json"});
+  let url=URL.createObjectURL(blob);
+  let now=new Date();
+  let name="集金管理_backup_"+now.getFullYear()+String(now.getMonth()+1).padStart(2,"0")+String(now.getDate()).padStart(2,"0")+".json";
+  let a=document.createElement("a"); a.href=url; a.download=name; a.click();
   URL.revokeObjectURL(url);
-  let ts = now.toLocaleDateString("ja-JP")+" "+now.toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"});
-  localStorage.setItem("lastBackup", ts);
-  document.getElementById("lastBackupTime").textContent = ts;
-  document.getElementById("backupMsg").textContent = "✅ バックアップを保存しました";
+  let ts=now.toLocaleDateString("ja-JP")+" "+now.toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"});
+  localStorage.setItem("lastBackup",ts);
+  document.getElementById("lastBackupTime").textContent=ts;
+  document.getElementById("backupMsg").textContent="✅ バックアップを保存しました";
   setTimeout(()=>{ document.getElementById("backupMsg").textContent=""; },3000);
-}
-
-async function importBackup(event){
-  let file = event.target.files[0];
-  if(!file) return;
-  let reader = new FileReader();
-  reader.onload = async function(e){
+};
+window.importBackup = async function(event){
+  let file=event.target.files[0]; if(!file) return;
+  let reader=new FileReader();
+  reader.onload=async function(e){
     try {
-      let backup = JSON.parse(e.target.result);
-      if(!backup.records || !backup.users){ alert("形式が正しくありません"); return; }
-      let recCount  = backup.records.length;
-      let userCount = Object.keys(backup.users).length;
-      if(!confirm(
-        "バックアップから復元します。\n\n" +
-        "・売上記録："+recCount+"件\n" +
-        "・社員数："+userCount+"名\n" +
-        "・保存日時："+(backup.exportedAt?new Date(backup.exportedAt).toLocaleString("ja-JP"):"不明")+"\n\n" +
-        "現在のデータは上書きされます。よろしいですか？"
-      )){ document.getElementById("importFile").value=""; return; }
+      let backup=JSON.parse(e.target.result);
+      if(!backup.records||!backup.users){ alert("形式が正しくありません"); return; }
+      if(!confirm("バックアップから復元します。
 
+・売上記録："+backup.records.length+"件
+・社員数："+Object.keys(backup.users).length+"名
+
+現在のデータは上書きされます。よろしいですか？"))
+        { document.getElementById("importFile").value=""; return; }
       showLoading("復元中…");
       try {
-        // recordsをFirebaseに書き込み（_keyを除いて）
-        let recObj = {};
-        backup.records.forEach((r,i)=>{
-          let {_key, ...data} = r;
-          let k = _key || ("imported_"+i+"_"+Date.now());
-          recObj[k] = data;
-        });
-        await set(ref(db,"records"), recObj);
-        users = backup.users;
-        await saveUsers();
+        let recObj={};
+        backup.records.forEach((r,i)=>{ let {_key,...data}=r; recObj[_key||("i"+i+"_"+Date.now())]=data; });
+        await set(ref(db,"records"),recObj);
+        users=backup.users; await saveUsers();
       } finally { hideLoading(); }
-
       document.getElementById("backupMsg").style.color="#1976d2";
-      document.getElementById("backupMsg").textContent="✅ "+recCount+"件のデータを復元しました";
+      document.getElementById("backupMsg").textContent="✅ "+backup.records.length+"件のデータを復元しました";
       setTimeout(()=>{ document.getElementById("backupMsg").textContent=""; document.getElementById("backupMsg").style.color="#43a047"; },4000);
     } catch(err){ alert("読み込みに失敗しました"); }
     document.getElementById("importFile").value="";
   };
   reader.readAsText(file);
+};
+function updateBackupTime(){
+  let el=document.getElementById("lastBackupTime");
+  if(el) el.textContent=localStorage.getItem("lastBackup")||"未保存";
 }
 
-function updateBackupTime(){
-  let ts = localStorage.getItem("lastBackup");
-  let el = document.getElementById("lastBackupTime");
-  if(el) el.textContent = ts || "未保存";
-}
+/* ===== PULL TO RELOAD ===== */
+(function(){
+  let startY=0, pulling=false, indicator=null;
+  function createIndicator(){
+    indicator=document.createElement("div");
+    indicator.style.cssText="position:fixed;top:0;left:0;width:100%;text-align:center;padding:10px;background:#e3f2fd;color:#1976d2;font-size:13px;font-weight:bold;z-index:300;transform:translateY(-100%);transition:transform .2s";
+    indicator.textContent="↓ 引っ張ってリロード";
+    document.body.appendChild(indicator);
+  }
+  createIndicator();
+  document.addEventListener("touchstart",e=>{ if(window.scrollY===0){ startY=e.touches[0].clientY; pulling=true; } },{passive:true});
+  document.addEventListener("touchmove",e=>{
+    if(!pulling) return;
+    let dist=e.touches[0].clientY-startY;
+    if(dist>0&&dist<120){
+      indicator.style.transform=`translateY(${Math.min(dist-44,0)}px)`;
+      indicator.textContent=dist>60?"↑ 離してリロード":"↓ 引っ張ってリロード";
+    }
+  },{passive:true});
+  document.addEventListener("touchend",e=>{
+    if(!pulling) return;
+    let dist=e.changedTouches[0].clientY-startY;
+    if(dist>60){ indicator.textContent="🔄 リロード中…"; indicator.style.transform="translateY(0)"; setTimeout(()=>location.reload(),400); }
+    else { indicator.style.transform="translateY(-100%)"; }
+    pulling=false;
+  });
+})();
 
 </script>
 
