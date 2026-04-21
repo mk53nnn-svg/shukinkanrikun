@@ -412,7 +412,7 @@ function load(){
     let firstName = (r.items && r.items[0] && r.items[0].name) ? r.items[0].name.slice(0,4) : "";
     // メモ先頭6文字
     let memoShort = (r.memo && r.memo.trim()) ? r.memo.trim().slice(0,6) : "";
-    let memoSpan  = memoShort ? `<span style="font-size:18px;color:#888;margin-left:12px">${memoShort}</span>` : "";
+    let memoSpan  = memoShort ? `<span style="font-size:12px;color:#888;margin-left:6px">${memoShort}</span>` : "";
     records.innerHTML+=`
       <div class="list">
         ${userLabel}${r.date} / ${r.customer}<br>
