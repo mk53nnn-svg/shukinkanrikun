@@ -260,11 +260,22 @@ async function deleteRecord(k)  { await remove(ref(db,"records/"+k)); }
 /* ===== INIT ===== */
 (async ()=>{
   showLoading("起動中…");
-  try { await loadUsers(); } catch(e){ console.error(e); }
-  listenRecords();
-  let saved = localStorage.getItem("loginUser");
-  if(saved && users[saved]){ currentUser=saved; start(); }
-  hideLoading();
+  try {
+    await loadUsers();
+    listenRecords();
+    let saved = localStorage.getItem("loginUser");
+    if(saved && users[saved]){ currentUser=saved; start(); }
+  } catch(e){
+    // Firebase接続失敗 → エラーをログイン画面に表示してローカルで動作
+    console.error("Firebase error:", e);
+    let msg = document.createElement("div");
+    msg.style.cssText = "background:#fff3e0;color:#e65100;padding:10px;border-radius:8px;font-size:12px;margin-top:8px;word-break:break-all";
+    msg.innerHTML = "⚠️ サーバー接続エラー：" + e.message + "<br><small>ローカルモードで起動します</small>";
+    loginPage.appendChild(msg);
+    // ローカルのusersでログインできるようフォールバック
+  } finally {
+    hideLoading();
+  }
 })();
 
 /* ===== LOGIN ===== */
