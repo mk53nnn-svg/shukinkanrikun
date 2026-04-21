@@ -22,6 +22,10 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
 .row{display:flex;gap:6px}
 .row input{flex:1}
 .hidden{display:none !important}
+.loading-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(255,255,255,.75);z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px}
+.spinner{width:40px;height:40px;border:4px solid #e3f2fd;border-top:4px solid #1976d2;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-text{color:#1976d2;font-size:14px;font-weight:bold}
 .list{padding:10px;border-bottom:1px solid #ddd}
 .badge{padding:3px 8px;border-radius:8px;color:#fff;font-size:12px}
 .red{background:#e53935}
@@ -45,6 +49,13 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
 
 </head>
 <body>
+
+<!-- ローディング -->
+
+<div id="loadingOverlay" class="loading-overlay hidden">
+  <div class="spinner"></div>
+  <div id="loadingMsg" class="loading-text">読み込み中…</div>
+</div>
 
 <header>集金管理くん</header>
 <div class="container">
@@ -140,6 +151,23 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
     <input id="newName" placeholder="表示名">
     <input id="newPw" placeholder="パスワード">
     <button onclick="addUser()">追加</button>
+
+```
+<hr>
+
+<h4>💾 データバックアップ</h4>
+<div style="font-size:13px;color:#555;margin-bottom:8px">
+  データが消えた時に備えて定期的にバックアップを保存してください。
+</div>
+<button onclick="exportBackup()" style="background:#43a047;margin-bottom:8px">⬇️ バックアップを保存（書き出し）</button>
+<button onclick="document.getElementById('importFile').click()" style="background:#f57c00">⬆️ バックアップから復元（読み込み）</button>
+<input type="file" id="importFile" accept=".json" class="hidden" onchange="importBackup(event)">
+<div id="backupMsg" style="font-size:13px;margin-top:6px;color:#43a047"></div>
+<div style="font-size:12px;color:#999;margin-top:6px">
+  最終バックアップ：<span id="lastBackupTime">未保存</span>
+</div>
+```
+
   </div>
 
 </div>
@@ -163,28 +191,115 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
   </div>
 </div>
 
-<script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, set, get, onValue, push, remove, update }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+/* ===== FIREBASE CONFIG ===== */
+const firebaseConfig = {
+  apiKey: "AIzaSyB_gHDRNuZqlAjCdbbwCaClpav-6qauLig",
+  authDomain: "shukin-kanri.firebaseapp.com",
+  databaseURL: "https://shukin-kanri-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "shukin-kanri",
+  storageBucket: "shukin-kanri.firebasestorage.app",
+  messagingSenderId: "854144324735",
+  appId: "1:854144324735:web:04d80a5076430150505b4a"
+};
+
+const app = initializeApp(firebaseConfig);
+const db  = getDatabase(app);
 
 /* ===== USERS ===== */
-let users = JSON.parse(localStorage.getItem("users")) || {
+let users = {
   arai:    {pass:"1234", name:"新井",  admin:false},
   hosoya:  {pass:"1234", name:"細谷",  admin:false},
   ikeda:   {pass:"1234", name:"池田",  admin:false},
   yamamoto:{pass:"1234", name:"山本",  admin:true}
 };
 
-let currentUser = null;
-let editIndex   = -1;
+let currentUser   = null;
+let editIndex     = -1;
 let currentSort   = "new";
 let abcDir        = 1;
 let currentFilter = "all";
-let currentStaff  = "all";  // 担当者フィルター
+let currentStaff  = "all";
+let recordsCache  = [];   // Firebaseから取得したレコードのキャッシュ
+
+/* ===== LOADING UI ===== */
+function showLoading(msg="読み込み中…"){
+  document.getElementById("loadingMsg").textContent = msg;
+  document.getElementById("loadingOverlay").classList.remove("hidden");
+}
+function hideLoading(){
+  document.getElementById("loadingOverlay").classList.add("hidden");
+}
+
+/* ===== FIREBASE: USERS ===== */
+async function loadUsers(){
+  const snap = await get(ref(db,"users"));
+  if(snap.exists()){
+    users = snap.val();
+  } else {
+    // 初回：デフォルトユーザーをFirebaseに書き込む
+    await set(ref(db,"users"), users);
+  }
+}
+
+async function saveUsers(){
+  await set(ref(db,"users"), users);
+}
+
+/* ===== FIREBASE: RECORDS ===== */
+function listenRecords(){
+  // リアルタイム同期：データが変わったら自動的に画面を更新
+  onValue(ref(db,"records"), (snap)=>{
+    if(snap.exists()){
+      let obj = snap.val();
+      // objectをindexつき配列に変換
+      recordsCache = Object.keys(obj).map(k=>({ _key:k, ...obj[k] }));
+    } else {
+      recordsCache = [];
+    }
+    if(currentUser){
+      load();
+      summaryView();
+      if(users[currentUser] && users[currentUser].admin) adminView();
+    }
+  });
+}
+
+function getData(){ return recordsCache; }
+
+async function pushRecord(obj){
+  const newRef = push(ref(db,"records"));
+  await set(newRef, obj);
+}
+
+async function updateRecord(key, obj){
+  await set(ref(db,"records/"+key), obj);
+}
+
+async function deleteRecord(key){
+  await remove(ref(db,"records/"+key));
+}
 
 /* ===== INIT ===== */
-if(localStorage.getItem("loginUser")){
-  currentUser = localStorage.getItem("loginUser");
-  start();
-}
+(async ()=>{
+  showLoading("起動中…");
+  await loadUsers();
+  // セッション復元
+  let saved = localStorage.getItem("loginUser");
+  if(saved && users[saved]){
+    currentUser = saved;
+    listenRecords();
+    hideLoading();
+    start();
+  } else {
+    hideLoading();
+    listenRecords();
+  }
+})();
 
 /* ===== LOGIN ===== */
 function login(){
@@ -198,6 +313,7 @@ function login(){
 
 function logout(){
   localStorage.removeItem("loginUser");
+  currentUser = null;
   location.reload();
 }
 
@@ -245,10 +361,6 @@ function showAdd(){
   show("add");
 }
 
-/* ===== DATA ===== */
-function getData(){ return JSON.parse(localStorage.getItem("records")||"[]"); }
-function setData(d){ localStorage.setItem("records", JSON.stringify(d)); }
-
 /* ===== ITEMS ===== */
 function addItem(){
   let div = document.createElement("div");
@@ -270,8 +382,7 @@ function calc(){
 }
 
 /* ===== SAVE ===== */
-function save(){
-  let d = getData();
+async function save(){
   let itemsArr = [];
   document.querySelectorAll("#items .row").forEach(r=>{
     itemsArr.push({
@@ -290,13 +401,20 @@ function save(){
     memo:     memo.value,
     paid:     false
   };
-  if(editIndex === -1){ d.push(obj); }
-  else { obj.paid = d[editIndex].paid; d[editIndex] = obj; }
 
-  setData(d);
-  load();
-  summaryView();
-  if(users[currentUser].admin) adminView();
+  showLoading("保存中…");
+  try {
+    if(editIndex === -1){
+      await pushRecord(obj);
+    } else {
+      let key = recordsCache[editIndex]._key;
+      obj.paid = recordsCache[editIndex].paid;
+      await updateRecord(key, obj);
+    }
+  } finally {
+    hideLoading();
+  }
+
   resetAddForm();
   show("list");
 }
@@ -312,13 +430,12 @@ function setFilter(f){
 
 /* ===== STAFF FILTER ===== */
 function buildStaffFilter(){
-  // 管理者以外は非表示
-  if(!users[currentUser].admin) return;
-  let bar = document.getElementById("staffFilterBar");
+  if(!currentUser || !users[currentUser] || !users[currentUser].admin) return;
+  let bar  = document.getElementById("staffFilterBar");
   let wrap = document.getElementById("staffFilterWrap");
+  if(!bar || !wrap) return;
   wrap.classList.remove("hidden");
 
-  // 全員ボタン + 社員ごとのボタンを生成
   let html = `<button id="sf-all" onclick="setStaff('all')" class="${currentStaff==='all'?'active':''}">全員</button>`;
   Object.keys(users).forEach(u=>{
     if(users[u].admin) return;
@@ -336,16 +453,14 @@ function setStaff(u){
 
 /* ===== SORT ===== */
 function setSort(s){
-  if(s === "abc"){
-    abcDir = (currentSort === "abc") ? abcDir * -1 : 1;
-  }
+  if(s === "abc") abcDir = (currentSort === "abc") ? abcDir*-1 : 1;
   currentSort = s;
   ["new","old","abc"].forEach(k=>{
     document.getElementById("s-"+k).classList.toggle("active", k===s);
   });
   let abcBtn = document.getElementById("s-abc");
   if(s === "abc"){
-    abcBtn.textContent = abcDir === 1 ? "あいうえお順 ▲" : "ん〜あ順 ▼";
+    abcBtn.textContent = abcDir===1 ? "あいうえお順 ▲" : "ん〜あ順 ▼";
   } else {
     abcBtn.textContent = "あいうえお順";
   }
@@ -354,6 +469,7 @@ function setSort(s){
 
 /* ===== LOAD LIST ===== */
 function load(){
+  if(!currentUser) return;
   let d = getData();
 
   let visible = d.map((r,i)=>({r,i})).filter(({r})=>{
@@ -362,14 +478,13 @@ function load(){
 
   if(currentFilter === "unpaid") visible = visible.filter(({r})=>!r.paid);
   if(currentFilter === "paid")   visible = visible.filter(({r})=>r.paid);
-  if(users[currentUser].admin && currentStaff !== "all") visible = visible.filter(({r})=>r.user===currentStaff);
+  if(users[currentUser].admin && currentStaff !== "all")
+    visible = visible.filter(({r})=>r.user===currentStaff);
 
   visible.sort((a,b)=>{
-    if(currentSort === "new") return b.r.date.localeCompare(a.r.date);
-    if(currentSort === "old") return a.r.date.localeCompare(b.r.date);
-    if(currentSort === "abc"){
-      return (a.r.customer||"").localeCompare(b.r.customer||"","ja") * abcDir;
-    }
+    if(currentSort === "new") return (b.r.date||"").localeCompare(a.r.date||"");
+    if(currentSort === "old") return (a.r.date||"").localeCompare(b.r.date||"");
+    if(currentSort === "abc") return (a.r.customer||"").localeCompare(b.r.customer||"","ja")*abcDir;
   });
 
   records.innerHTML = "";
@@ -379,8 +494,8 @@ function load(){
   }
 
   visible.forEach(({r,i})=>{
-    let memoHtml   = r.memo ? `<div class="memo-text">📝 ${r.memo}</div>` : "";
-    let userLabel  = users[currentUser].admin
+    let memoHtml  = r.memo ? `<div class="memo-text">📝 ${r.memo}</div>` : "";
+    let userLabel = users[currentUser].admin
       ? `<span style="font-size:12px;color:#888">${users[r.user]?.name||r.user}</span><br>`
       : "";
     records.innerHTML += `
@@ -399,29 +514,30 @@ function load(){
 }
 
 /* ===== ACTIONS ===== */
-function toggle(i){
-  let d = getData();
-  d[i].paid = !d[i].paid;
-  setData(d); load(); summaryView();
-  if(users[currentUser].admin) adminView();
+async function toggle(i){
+  let r = recordsCache[i];
+  showLoading("更新中…");
+  try {
+    await updateRecord(r._key, {...r, paid:!r.paid});
+  } finally { hideLoading(); }
 }
 
-function del(i){
-  if(confirm("削除しますか？")){
-    let d = getData();
-    d.splice(i,1);
-    setData(d); load(); summaryView();
-    if(users[currentUser].admin) adminView();
-  }
+async function del(i){
+  if(!confirm("削除しますか？")) return;
+  let r = recordsCache[i];
+  showLoading("削除中…");
+  try {
+    await deleteRecord(r._key);
+  } finally { hideLoading(); }
 }
 
 function edit(i){
-  let d = getData()[i];
-  customer.value = d.customer;
-  date.value     = d.date;
-  memo.value     = d.memo || "";
+  let r = recordsCache[i];
+  customer.value = r.customer;
+  date.value     = r.date;
+  memo.value     = r.memo || "";
   items.innerHTML = "";
-  d.items.forEach(it=>{
+  r.items.forEach(it=>{
     let div = document.createElement("div");
     div.className = "row";
     div.innerHTML = `
@@ -438,16 +554,17 @@ function edit(i){
 
 /* ===== SUMMARY ===== */
 function summaryView(){
-  if(users[currentUser].admin) return;
+  if(!currentUser || users[currentUser].admin) return;
   let d = getData().filter(x=>x.user===currentUser);
-  let remain = d.filter(x=>!x.paid).reduce((a,b)=>a+b.total, 0);
+  let remain = d.filter(x=>!x.paid).reduce((a,b)=>a+b.total,0);
   summary.innerHTML = `件数：${d.length}<br>未集金：${d.filter(x=>!x.paid).length}<br>売上残合計：¥${remain}`;
 }
 
 /* ===== ADMIN ===== */
 function adminView(){
-  if(!users[currentUser].admin) return;
+  if(!currentUser || !users[currentUser] || !users[currentUser].admin) return;
   let d = getData();
+
   let html = "";
   Object.keys(users).forEach(u=>{
     if(users[u].admin) return;
@@ -455,7 +572,8 @@ function adminView(){
     html += `${users[u].name}：¥${remain}<br>`;
   });
   adminSummaryTop.innerHTML = html;
-  buildStaffFilter(); // 社員変更時にフィルターも更新
+  buildStaffFilter();
+  updateBackupTime();
 
   userList.innerHTML = "";
   Object.keys(users).forEach(u=>{
@@ -472,19 +590,21 @@ function adminView(){
 }
 
 /* ===== USER ADD / DEL ===== */
-function addUser(){
+async function addUser(){
   if(!newId.value||!newName.value||!newPw.value){ alert("全項目を入力してください"); return; }
   users[newId.value] = {pass:newPw.value, name:newName.value, admin:false};
-  localStorage.setItem("users", JSON.stringify(users));
+  showLoading("保存中…");
+  try { await saveUsers(); } finally { hideLoading(); }
   newId.value = newName.value = newPw.value = "";
   adminView();
 }
 
-function delUser(id){
+async function delUser(id){
   if(id==="yamamoto") return alert("削除不可");
   if(!confirm(users[id].name+"を削除しますか？")) return;
   delete users[id];
-  localStorage.setItem("users", JSON.stringify(users));
+  showLoading("削除中…");
+  try { await saveUsers(); } finally { hideLoading(); }
   adminView();
 }
 
@@ -500,7 +620,7 @@ function closeEditUserModal(){
   editUserModal.classList.add("hidden");
 }
 
-function saveEditUser(){
+async function saveEditUser(){
   let id = editUserId.value;
   if(!editUserName.value || !editUserPw.value){
     alert("名前とパスワードを入力してください");
@@ -508,10 +628,84 @@ function saveEditUser(){
   }
   users[id].name = editUserName.value;
   users[id].pass = editUserPw.value;
-  localStorage.setItem("users", JSON.stringify(users));
+  showLoading("保存中…");
+  try { await saveUsers(); } finally { hideLoading(); }
   closeEditUserModal();
   adminView();
   alert(users[id].name + " の情報を更新しました");
+}
+
+/* ===== BACKUP / RESTORE ===== */
+function exportBackup(){
+  let backup = {
+    version: 2,
+    exportedAt: new Date().toISOString(),
+    records: recordsCache,
+    users: users
+  };
+  let json = JSON.stringify(backup, null, 2);
+  let blob = new Blob([json], {type:"application/json"});
+  let url  = URL.createObjectURL(blob);
+  let now  = new Date();
+  let name = "集金管理_backup_"
+    + now.getFullYear()
+    + String(now.getMonth()+1).padStart(2,"0")
+    + String(now.getDate()).padStart(2,"0") + ".json";
+  let a = document.createElement("a");
+  a.href=url; a.download=name; a.click();
+  URL.revokeObjectURL(url);
+  let ts = now.toLocaleDateString("ja-JP")+" "+now.toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"});
+  localStorage.setItem("lastBackup", ts);
+  document.getElementById("lastBackupTime").textContent = ts;
+  document.getElementById("backupMsg").textContent = "✅ バックアップを保存しました";
+  setTimeout(()=>{ document.getElementById("backupMsg").textContent=""; },3000);
+}
+
+async function importBackup(event){
+  let file = event.target.files[0];
+  if(!file) return;
+  let reader = new FileReader();
+  reader.onload = async function(e){
+    try {
+      let backup = JSON.parse(e.target.result);
+      if(!backup.records || !backup.users){ alert("形式が正しくありません"); return; }
+      let recCount  = backup.records.length;
+      let userCount = Object.keys(backup.users).length;
+      if(!confirm(
+        "バックアップから復元します。\n\n" +
+        "・売上記録："+recCount+"件\n" +
+        "・社員数："+userCount+"名\n" +
+        "・保存日時："+(backup.exportedAt?new Date(backup.exportedAt).toLocaleString("ja-JP"):"不明")+"\n\n" +
+        "現在のデータは上書きされます。よろしいですか？"
+      )){ document.getElementById("importFile").value=""; return; }
+
+      showLoading("復元中…");
+      try {
+        // recordsをFirebaseに書き込み（_keyを除いて）
+        let recObj = {};
+        backup.records.forEach((r,i)=>{
+          let {_key, ...data} = r;
+          let k = _key || ("imported_"+i+"_"+Date.now());
+          recObj[k] = data;
+        });
+        await set(ref(db,"records"), recObj);
+        users = backup.users;
+        await saveUsers();
+      } finally { hideLoading(); }
+
+      document.getElementById("backupMsg").style.color="#1976d2";
+      document.getElementById("backupMsg").textContent="✅ "+recCount+"件のデータを復元しました";
+      setTimeout(()=>{ document.getElementById("backupMsg").textContent=""; document.getElementById("backupMsg").style.color="#43a047"; },4000);
+    } catch(err){ alert("読み込みに失敗しました"); }
+    document.getElementById("importFile").value="";
+  };
+  reader.readAsText(file);
+}
+
+function updateBackupTime(){
+  let ts = localStorage.getItem("lastBackup");
+  let el = document.getElementById("lastBackupTime");
+  if(el) el.textContent = ts || "未保存";
 }
 
 </script>
