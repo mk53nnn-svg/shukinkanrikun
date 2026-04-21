@@ -50,6 +50,10 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
 </head>
 <body>
 
+<!-- プルリロードインジケーター -->
+
+<div id="pullIndicator" style="display:none;position:fixed;top:0;left:0;width:100%;text-align:center;padding:10px;background:#e3f2fd;color:#1976d2;font-size:13px;font-weight:bold;z-index:300">↓ 引っ張ってリロード</div>
+
 <!-- ローディング -->
 
 <div id="loadingOverlay" class="loading-overlay hidden">
@@ -110,6 +114,8 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
   <div id="listPage" class="card hidden">
     <h3>一覧</h3>
 
+```
+<input id="searchBox" type="search" placeholder="🔍 取引先・商品名で検索" oninput="load()" style="margin-bottom:4px">
 
 <div class="section-label">絞り込み</div>
 <div class="tool-bar">
@@ -132,7 +138,7 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
 </div>
 
 <div id="records"></div>
-
+```
 
   </div>
 
@@ -152,7 +158,7 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
     <input id="newPw" placeholder="パスワード">
     <button onclick="addUser()">追加</button>
 
-
+```
 <hr>
 
 <h4>💾 データバックアップ</h4>
@@ -166,7 +172,7 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
 <div style="font-size:12px;color:#999;margin-top:6px">
   最終バックアップ：<span id="lastBackupTime">未保存</span>
 </div>
-
+```
 
   </div>
 
@@ -399,6 +405,15 @@ function load(){
   if(currentFilter==="unpaid") visible=visible.filter(({r})=>!r.paid);
   if(currentFilter==="paid")   visible=visible.filter(({r})=>r.paid);
   if(users[currentUser].admin&&currentStaff!=="all") visible=visible.filter(({r})=>r.user===currentStaff);
+  // フリーワード検索（取引先・商品名）
+  let searchWord=(document.getElementById("searchBox")?.value||"").trim();
+  if(searchWord){
+    visible=visible.filter(({r})=>{
+      let hit=(r.customer||"").includes(searchWord);
+      if(!hit&&r.items) hit=r.items.some(it=>(it.name||"").includes(searchWord));
+      return hit;
+    });
+  }
   visible.sort((a,b)=>{
     if(currentSort==="new") return (b.r.date||"").localeCompare(a.r.date||"");
     if(currentSort==="old") return (a.r.date||"").localeCompare(b.r.date||"");
@@ -412,7 +427,7 @@ function load(){
     let firstName = (r.items && r.items[0] && r.items[0].name) ? r.items[0].name.slice(0,4) : "";
     // メモ先頭6文字
     let memoShort = (r.memo && r.memo.trim()) ? r.memo.trim().slice(0,6) : "";
-    let memoSpan  = memoShort ? `<span style="font-size:12px;color:#888;margin-left:6px">${memoShort}</span>` : "";
+    let memoSpan  = memoShort ? `<span style="font-size:12px;color:#888;margin-left:6px">📝${memoShort}</span>` : "";
     records.innerHTML+=`
       <div class="list">
         ${userLabel}${r.date} / ${r.customer}<br>
@@ -555,28 +570,29 @@ function updateBackupTime(){
 
 /* ===== PULL TO RELOAD ===== */
 (function(){
-  let startY=0, pulling=false, indicator=null;
-  function createIndicator(){
-    indicator=document.createElement("div");
-    indicator.style.cssText="position:fixed;top:0;left:0;width:100%;text-align:center;padding:10px;background:#e3f2fd;color:#1976d2;font-size:13px;font-weight:bold;z-index:300;transform:translateY(-100%);transition:transform .2s";
-    indicator.textContent="↓ 引っ張ってリロード";
-    document.body.appendChild(indicator);
-  }
-  createIndicator();
-  document.addEventListener("touchstart",e=>{ if(window.scrollY===0){ startY=e.touches[0].clientY; pulling=true; } },{passive:true});
+  let startY=0, pulling=false;
+  const indicator=document.getElementById("pullIndicator");
+  document.addEventListener("touchstart",e=>{
+    if(window.scrollY===0){ startY=e.touches[0].clientY; pulling=true; }
+  },{passive:true});
   document.addEventListener("touchmove",e=>{
     if(!pulling) return;
     let dist=e.touches[0].clientY-startY;
     if(dist>0&&dist<120){
-      indicator.style.transform=`translateY(${Math.min(dist-44,0)}px)`;
+      indicator.style.display="block";
+      indicator.style.opacity=Math.min(dist/60,1);
       indicator.textContent=dist>60?"↑ 離してリロード":"↓ 引っ張ってリロード";
     }
   },{passive:true});
   document.addEventListener("touchend",e=>{
     if(!pulling) return;
     let dist=e.changedTouches[0].clientY-startY;
-    if(dist>60){ indicator.textContent="🔄 リロード中…"; indicator.style.transform="translateY(0)"; setTimeout(()=>location.reload(),400); }
-    else { indicator.style.transform="translateY(-100%)"; }
+    if(dist>60){
+      indicator.textContent="🔄 リロード中…";
+      setTimeout(()=>location.reload(),300);
+    } else {
+      indicator.style.display="none";
+    }
     pulling=false;
   });
 })();
