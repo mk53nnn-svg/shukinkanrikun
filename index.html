@@ -743,9 +743,9 @@ window.scanImage = async function(event){
     let response;
     let data;
     try {
-      response = await fetch("https://api.anthropic.com/v1/messages", {
+      response = await fetch("https://script.google.com/macros/s/AKfycby2V2DIxRRWXPp-ODTcqoiwo2YeYm3xx1bUwwR6vngch39fpsBsqz7lKUKwm3JsOYc/exec", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "text/plain" },
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
           max_tokens: 1000,
