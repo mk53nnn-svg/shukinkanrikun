@@ -54,6 +54,68 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
 
 <div id="pullIndicator" style="display:none;position:fixed;top:0;left:0;width:100%;text-align:center;padding:10px;background:#e3f2fd;color:#1976d2;font-size:13px;font-weight:bold;z-index:300">↓ 引っ張ってリロード</div>
 
+<!-- カメラガイドオーバーレイ -->
+
+<div id="cameraOverlay" class="hidden" style="position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:500;flex-direction:column;align-items:center;justify-content:center;display:flex">
+
+  <!-- カメラ映像 -->
+
+<video id="cameraVideo" style="width:100%;height:100%;object-fit:cover;position:absolute;top:0;left:0" playsinline></video>
+
+  <!-- ガイドオーバーレイ -->
+
+  <div style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none">
+
+```
+<!-- 暗転マスク（ガイド外） -->
+<div style="position:absolute;top:0;left:0;right:0;height:12%;background:rgba(0,0,0,0.6)"></div>
+<div style="position:absolute;bottom:0;left:0;right:0;height:28%;background:rgba(0,0,0,0.6)"></div>
+<div style="position:absolute;top:12%;bottom:28%;left:0;width:3%;background:rgba(0,0,0,0.6)"></div>
+<div style="position:absolute;top:12%;bottom:28%;right:0;width:3%;background:rgba(0,0,0,0.6)"></div>
+
+<!-- ガイド枠（帳票の商品明細エリア） -->
+<div style="position:absolute;top:12%;bottom:28%;left:3%;right:3%;border:2px solid #43a047">
+
+  <!-- 四隅マーカー -->
+  <div style="position:absolute;top:-2px;left:-2px;width:18px;height:18px;border-top:4px solid #fff;border-left:4px solid #fff"></div>
+  <div style="position:absolute;top:-2px;right:-2px;width:18px;height:18px;border-top:4px solid #fff;border-right:4px solid #fff"></div>
+  <div style="position:absolute;bottom:-2px;left:-2px;width:18px;height:18px;border-bottom:4px solid #fff;border-left:4px solid #fff"></div>
+  <div style="position:absolute;bottom:-2px;right:-2px;width:18px;height:18px;border-bottom:4px solid #fff;border-right:4px solid #fff"></div>
+
+  <!-- 列の区切り線 -->
+  <!-- 品名列(0%〜58%) | 数量列(58%〜72%) | 単価列(72%〜88%) | 金額(88%〜100%) -->
+  <div style="position:absolute;top:0;bottom:0;left:58%;width:1px;background:rgba(255,255,0,0.7)"></div>
+  <div style="position:absolute;top:0;bottom:0;left:72%;width:1px;background:rgba(255,255,0,0.7)"></div>
+  <div style="position:absolute;top:0;bottom:0;left:88%;width:1px;background:rgba(255,100,100,0.5)"></div>
+
+  <!-- 列ラベル -->
+  <div style="position:absolute;top:4px;left:1%;font-size:11px;color:#43a047;font-weight:bold;background:rgba(0,0,0,0.5);padding:1px 4px;border-radius:3px">品名</div>
+  <div style="position:absolute;top:4px;left:59%;font-size:11px;color:#ff0;font-weight:bold;background:rgba(0,0,0,0.5);padding:1px 4px;border-radius:3px">数量</div>
+  <div style="position:absolute;top:4px;left:73%;font-size:11px;color:#ff0;font-weight:bold;background:rgba(0,0,0,0.5);padding:1px 4px;border-radius:3px">単価</div>
+  <div style="position:absolute;top:4px;left:89%;font-size:11px;color:rgba(255,100,100,0.9);font-weight:bold;background:rgba(0,0,0,0.5);padding:1px 4px;border-radius:3px">金額</div>
+
+</div>
+
+<!-- 上部ガイドメッセージ -->
+<div style="position:absolute;top:4%;left:0;right:0;text-align:center;color:#fff;font-size:13px;font-weight:bold;text-shadow:0 1px 3px rgba(0,0,0,0.8)">
+  帳票の商品明細欄をガイド枠に合わせてください
+</div>
+<div style="position:absolute;top:8%;left:0;right:0;text-align:center;color:#43a047;font-size:11px;text-shadow:0 1px 3px rgba(0,0,0,0.8)">
+  品名・数量・単価の列を黄色の線に揃えてください
+</div>
+```
+
+  </div>
+
+  <!-- 撮影ボタン -->
+
+  <div style="position:absolute;bottom:10%;left:0;right:0;display:flex;justify-content:center;gap:24px;align-items:center">
+    <button onclick="closeCamera()" style="width:auto;padding:10px 20px;background:rgba(80,80,80,0.9);border-radius:50px;font-size:14px;color:#fff;border:none">✕ キャンセル</button>
+    <button onclick="capturePhoto()" style="width:64px;height:64px;border-radius:50%;background:#fff;border:5px solid #43a047;font-size:26px;padding:0;line-height:1">📷</button>
+  </div>
+
+</div>
+
 <!-- ローディング -->
 
 <div id="loadingOverlay" class="loading-overlay hidden">
@@ -100,7 +162,7 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
 
 ```
 <!-- 写真読み取り -->
-<button onclick="document.getElementById('scanInput').click()" style="background:#43a047;margin-bottom:4px">📷 写真から読み取る</button>
+<button onclick="openCamera()" style="background:#43a047;margin-bottom:4px">📷 写真から読み取る</button>
 <input type="file" id="scanInput" accept="image/*" capture="environment" class="hidden" onchange="scanImage(event)">
 <div id="scanStatus" style="font-size:13px;color:#1976d2;min-height:18px;margin-bottom:6px"></div>
 
@@ -719,10 +781,49 @@ function updateBackupTime(){
   });
 })();
 
+/* ===== CAMERA GUIDE ===== */
+window.openCamera = function(){
+  const overlay = document.getElementById("cameraOverlay");
+  overlay.classList.remove("hidden");
+  const video = document.getElementById("cameraVideo");
+  navigator.mediaDevices.getUserMedia({
+    video:{ facingMode:"environment", width:{ideal:1920}, height:{ideal:1080} }
+  }).then(stream=>{
+    video.srcObject = stream;
+    video.play();
+    window._cameraStream = stream;
+  }).catch(()=>{
+    overlay.classList.add("hidden");
+    document.getElementById("scanInput").click();
+  });
+};
+
+window.closeCamera = function(){
+  if(window._cameraStream){
+    window._cameraStream.getTracks().forEach(t=>t.stop());
+    window._cameraStream = null;
+  }
+  document.getElementById("cameraOverlay").classList.add("hidden");
+};
+
+window.capturePhoto = function(){
+  const video  = document.getElementById("cameraVideo");
+  const canvas = document.createElement("canvas");
+  canvas.width  = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext("2d").drawImage(video, 0, 0);
+  canvas.toBlob(blob=>{ closeCamera(); processBlob(blob); }, "image/jpeg", 0.95);
+};
+
 /* ===== SCAN IMAGE (Google Vision OCR) ===== */
 window.scanImage = async function(event){
   const file = event.target.files[0];
   if(!file) return;
+  event.target.value = "";
+  processBlob(file);
+};
+
+async function processBlob(blob){
   const API_KEY = "AIzaSyAlGc-fBeHq4fZte5CTOaf3_y4g5q5OR4I";
   const status  = document.getElementById("scanStatus");
   status.style.color   = "#1976d2";
@@ -733,7 +834,7 @@ window.scanImage = async function(event){
       const reader = new FileReader();
       reader.onload  = ()=> resolve(reader.result.split(",")[1]);
       reader.onerror = reject;
-      reader.readAsDataURL(file);
+      reader.readAsDataURL(blob);
     });
 
     const res = await fetch(
@@ -808,15 +909,24 @@ window.scanImage = async function(event){
       });
     });
 
+    // ガイド枠に合わせた固定座標
+    // ガイド: 横3%〜97%, 縦12%〜72%
+    // 列: 品名(3%〜57%), 数量(57%〜69%), 単価(69%〜84%), 金額(84%〜97%)
+    const guideLeft   = maxX2 * 0.03;
+    const guideRight  = maxX2 * 0.97;
+    const guideTop    = maxY2 * 0.12;
+    const guideBottom = maxY2 * 0.72;
+    const guideWidth  = guideRight - guideLeft;
+
     const area = {
-      left:   maxX2 * 0.05,
-      right:  maxX2 * 0.70,
-      top:    maxY2 * 0.55,
-      bottom: maxY2 * 0.82
+      left:   guideLeft,
+      right:  guideLeft + guideWidth * 0.84,  // 金額列の左端まで
+      top:    guideTop,
+      bottom: guideBottom
     };
-    const colQtyLeft   = maxX2 * 0.42;
-    const colPriceLeft = maxX2 * 0.52;
-    const colPriceRight= maxX2 * 0.68;
+    const colQtyLeft   = guideLeft + guideWidth * 0.58;
+    const colPriceLeft = guideLeft + guideWidth * 0.72;
+    const colPriceRight= guideLeft + guideWidth * 0.84;
 
     let productWords=[];
     for(let i=1;i<words.length;i++){
@@ -881,7 +991,6 @@ window.scanImage = async function(event){
     addItem();
   }
 
-  event.target.value="";
 };
 
 </script>
