@@ -97,16 +97,25 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
 
   <div id="addPage" class="card hidden">
     <h3>納品登録</h3>
-    <input id="customer" placeholder="取引先名">
-    <input id="date" type="date">
-    <div id="items"></div>
-    <button onclick="addItem()">＋商品追加</button>
-    <div>合計：¥<span id="total">0</span></div>
-    <div style="margin-top:8px">
-      <label style="font-size:13px;color:#555">📝 メモ（任意）</label>
-      <textarea id="memo" placeholder="備考・メモを入力（任意）"></textarea>
-    </div>
-    <button onclick="save()">保存</button>
+
+```
+<!-- 写真読み取り -->
+<button onclick="document.getElementById('scanInput').click()" style="background:#43a047;margin-bottom:4px">📷 写真から読み取る</button>
+<input type="file" id="scanInput" accept="image/*" capture="environment" class="hidden" onchange="scanImage(event)">
+<div id="scanStatus" style="font-size:13px;color:#1976d2;min-height:18px;margin-bottom:6px"></div>
+
+<input id="customer" placeholder="取引先名">
+<input id="date" type="date">
+<div id="items"></div>
+<button onclick="addItem()">＋商品追加</button>
+<div>合計：¥<span id="total">0</span></div>
+<div style="margin-top:8px">
+  <label style="font-size:13px;color:#555">📝 メモ（任意）</label>
+  <textarea id="memo" placeholder="備考・メモを入力（任意）"></textarea>
+</div>
+<button onclick="save()">保存</button>
+```
+
   </div>
 
   <!-- LIST -->
@@ -114,7 +123,7 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
   <div id="listPage" class="card hidden">
     <h3>一覧</h3>
 
-
+```
 <div style="display:flex;gap:6px;margin-bottom:4px">
   <input id="searchBox" type="search" placeholder="🔍 取引先・商品名で検索" style="margin:0" onkeydown="if(event.key==='Enter'){this.blur();doSearch();}">
   <button onclick="doSearch()" style="width:auto;padding:10px 16px;margin:0;white-space:nowrap">検索</button>
@@ -141,7 +150,7 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
 </div>
 
 <div id="records"></div>
-
+```
 
   </div>
 
@@ -161,7 +170,7 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
     <input id="newPw" placeholder="パスワード">
     <button onclick="addUser()">追加</button>
 
-
+```
 <hr>
 
 <h4>💾 データバックアップ</h4>
@@ -175,7 +184,7 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
 <div style="font-size:12px;color:#999;margin-top:6px">
   最終バックアップ：<span id="lastBackupTime">未保存</span>
 </div>
-
+```
 
   </div>
 
@@ -709,6 +718,109 @@ function updateBackupTime(){
     pulling=false;
   });
 })();
+
+/* ===== SCAN IMAGE (AI読み取り) ===== */
+window.scanImage = async function(event){
+  let file = event.target.files[0];
+  if(!file) return;
+
+  let status = document.getElementById("scanStatus");
+  status.textContent = "🔄 AIが読み取り中…";
+  status.style.color = "#1976d2";
+
+  try {
+    // base64変換
+    let base64 = await new Promise((res,rej)=>{
+      let reader = new FileReader();
+      reader.onload = ()=> res(reader.result.split(",")[1]);
+      reader.onerror = rej;
+      reader.readAsDataURL(file);
+    });
+
+    let mediaType = file.type || "image/jpeg";
+
+    // Anthropic API呼び出し
+    let response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1000,
+        messages: [{
+          role: "user",
+          content: [
+            {
+              type: "image",
+              source: { type: "base64", media_type: mediaType, data: base64 }
+            },
+            {
+              type: "text",
+              text: `この請求書・納品書の画像から以下の情報をJSONで返してください。
+必ずJSONのみ返し、説明文やマークダウンは不要です。
+
+{
+  "customer": "取引先名（「様」の前まで。複数行にまたがる場合は全て繋げる）",
+  "items": [
+    {"name": "商品名", "qty": 数量(数値), "price": 単価(数値)},
+    ...
+  ]
+}
+
+ルール：
+- 品名欄の行のうち、同じ行に数量と単価の両方に数字があるものだけitemsに含める
+- 数量・単価が空欄またはない行はスキップ
+- 金額列は無視（数量×単価で計算するため）
+- 取引先名は「様」を含めず、その直前まで
+- 数値はカンマなしの整数で返す`
+            }
+          ]
+        }]
+      })
+    });
+
+    let data = await response.json();
+
+    if(!response.ok){
+      throw new Error(data.error?.message || "API error");
+    }
+
+    let text = data.content.map(c=>c.text||"").join("");
+
+    // JSON部分だけ抽出
+    let jsonMatch = text.match(/\{[\s\S]*\}/);
+    if(!jsonMatch) throw new Error("JSONが見つかりませんでした");
+    let parsed = JSON.parse(jsonMatch[0]);
+
+    // フォームに反映
+    if(parsed.customer) customer.value = parsed.customer;
+
+    if(parsed.items && parsed.items.length > 0){
+      items.innerHTML = "";
+      parsed.items.forEach(it=>{
+        let div = document.createElement("div");
+        div.className = "row";
+        div.innerHTML = `
+          <input class="n" value="${it.name||''}">
+          <input class="q" value="${it.qty||''}" type="number" oninput="calc()">
+          <input class="p" value="${it.price||''}" type="number" oninput="calc()">
+        `;
+        items.appendChild(div);
+      });
+      calc();
+    }
+
+    status.style.color = "#43a047";
+    status.textContent = "✅ 読み取り完了！内容を確認してください";
+
+  } catch(e) {
+    status.style.color = "#e53935";
+    status.textContent = "❌ 読み取り失敗：" + e.message;
+    console.error(e);
+  }
+
+  // inputをリセット（同じファイルを再選択できるように）
+  event.target.value = "";
+};
 
 </script>
 
