@@ -719,13 +719,13 @@ function updateBackupTime(){
   });
 })();
 
-/* ===== SCAN IMAGE (AI読み取り) ===== */
+/* ===== SCAN IMAGE (Google Vision OCR) ===== */
 window.scanImage = async function(event){
   let file = event.target.files[0];
   if(!file) return;
 
   let status = document.getElementById("scanStatus");
-  status.textContent = "🔄 AIが読み取り中…";
+  status.textContent = "🔄 読み取り中…";
   status.style.color = "#1976d2";
 
   try {
@@ -737,77 +737,156 @@ window.scanImage = async function(event){
       reader.readAsDataURL(file);
     });
 
-    let mediaType = file.type || "image/jpeg";
-
-    // Anthropic API呼び出し
-    let response;
-    let data;
-    try {
-      response = await fetch("https://script.google.com/macros/s/AKfycby2V2DIxRRWXPp-ODTcqoiwo2YeYm3xx1bUwwR6vngch39fpsBsqz7lKUKwm3JsOYc/exec", {
+    // Google Cloud Vision API呼び出し
+    let apiKey = "AIzaSyAlGc-fBeHq4fZte5CTOaf3_y4g5q5OR4I";
+    let visionRes = await fetch(
+      "https://vision.googleapis.com/v1/images:annotate?key=" + apiKey,
+      {
         method: "POST",
-        headers: { "Content-Type": "text/plain" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1000,
-          messages: [{
-            role: "user",
-            content: [
-              {
-                type: "image",
-                source: { type: "base64", media_type: mediaType, data: base64 }
-              },
-              {
-                type: "text",
-                text: "この請求書・納品書の画像から情報をJSONのみで返してください。説明文不要。形式: {customer:取引先名(様の前まで), items:[{name:商品名, qty:数量の整数, price:単価の整数}]} ルール:品名欄で数量と単価両方に数字がある行のみ含める。数値はカンマなし整数。"
-              }
-            ]
+          requests: [{
+            image: { content: base64 },
+            features: [{ type: "DOCUMENT_TEXT_DETECTION" }]
           }]
         })
+      }
+    );
+
+    let visionData = await visionRes.json();
+    if(!visionRes.ok) throw new Error("Vision APIエラー: " + JSON.stringify(visionData).slice(0,100));
+
+    // 全テキストブロック（座標付き）を取得
+    let pages = visionData.responses[0]?.fullTextAnnotation?.pages;
+    if(!pages) throw new Error("テキストが検出されませんでした");
+
+    // 全wordsを座標付きで抽出
+    let words = [];
+    pages.forEach(page=>{
+      page.blocks.forEach(block=>{
+        block.paragraphs.forEach(para=>{
+          para.words.forEach(word=>{
+            let text = word.symbols.map(s=>s.text).join("");
+            let xs = word.boundingBox.vertices.map(v=>v.x||0);
+            let ys = word.boundingBox.vertices.map(v=>v.y||0);
+            let cx = (Math.min(...xs)+Math.max(...xs))/2;
+            let cy = (Math.min(...ys)+Math.max(...ys))/2;
+            words.push({text, cx, cy});
+          });
+        });
       });
-    } catch(fetchErr) {
-      throw new Error("通信エラー: " + fetchErr.message + " (URL到達不可またはCORS)");
+    });
+
+    // 画像の幅を取得（列判定に使用）
+    let allX = words.map(w=>w.cx);
+    let imgW  = Math.max(...allX);
+
+    // ---- 取引先名抽出 ----
+    // 「様」を含む行を探し、その行の左側テキストを結合
+    let customerName = "";
+    let sameLine = words.filter(w=>w.text==="様");
+    if(sameLine.length > 0){
+      let sameY = sameLine[0].cy;
+      // 「様」と同じ行（Y座標±20px）の左側の単語を結合
+      let lineWords = words
+        .filter(w=>Math.abs(w.cy-sameY)<20 && w.text!=="様")
+        .sort((a,b)=>a.cx-b.cx);
+      customerName = lineWords.map(w=>w.text).join("");
+      // 「様」が行末でなく途中に名前がある場合（複数行対応）
+      if(!customerName){
+        // 「様」の左側のみ
+        customerName = words
+          .filter(w=>Math.abs(w.cy-sameY)<20 && w.cx<sameLine[0].cx)
+          .sort((a,b)=>a.cx-b.cx)
+          .map(w=>w.text).join("");
+      }
     }
+    if(customerName) customer.value = customerName.replace(/様/g,"").trim();
 
-    try {
-      data = await response.json();
-    } catch(jsonErr) {
-      throw new Error("レスポンス解析失敗: HTTP " + response.status);
-    }
+    // ---- 表の列範囲をX座標で推定 ----
+    // 帳票の構造：品名(左) | 数量(中左) | 単価(中右) | 金額(右)
+    // 品名ヘッダー「品名」または「品」のX座標を基準にする
+    let hinmeiHeader = words.find(w=>w.text==="品名"||w.text==="品");
+    let suryoHeader  = words.find(w=>w.text==="数量"||w.text==="数");
+    let tankHeader   = words.find(w=>w.text==="単価"||w.text==="単");
+    let kingakHeader = words.find(w=>w.text==="金額"||w.text==="金");
 
-    if(!response.ok){
-      throw new Error("APIエラー " + response.status + ": " + (data.error?.message || JSON.stringify(data).slice(0,100)));
-    }
+    // ヘッダーが見つからない場合は画像幅で大まかに推定
+    let colName  = hinmeiHeader ? hinmeiHeader.cx : imgW * 0.15;
+    let colQty   = suryoHeader  ? suryoHeader.cx  : imgW * 0.55;
+    let colPrice = tankHeader   ? tankHeader.cx   : imgW * 0.70;
+    let colAmt   = kingakHeader ? kingakHeader.cx : imgW * 0.85;
 
-    console.log("API response:", JSON.stringify(data).slice(0,300));
+    // 列の境界（各列ヘッダーの中間点）
+    let boundQty   = (colName  + colQty)   / 2;
+    let boundPrice = (colQty   + colPrice) / 2;
+    let boundAmt   = (colPrice + colAmt)   / 2;
 
-    if(!data.content){
-      throw new Error("レスポンス異常: " + JSON.stringify(data).slice(0,150));
-    }
+    // ヘッダー行のY座標（これより下が明細）
+    let headerY = Math.max(
+      hinmeiHeader?.cy||0, suryoHeader?.cy||0,
+      tankHeader?.cy||0,   kingakHeader?.cy||0
+    );
 
-    let text = data.content.map(c=>c.text||"").join("");
+    // ---- 明細行の抽出 ----
+    // ヘッダーより下のワードをY座標でグループ化（行ごとに±15px）
+    let detailWords = words.filter(w=>w.cy > headerY + 10);
 
-    // JSON部分だけ抽出
-    let jsonMatch = text.match(/\{[\s\S]*\}/);
-    if(!jsonMatch) throw new Error("JSONが見つかりませんでした / AI応答:" + text.slice(0,100));
-    let parsed = JSON.parse(jsonMatch[0]);
+    // 行グループ化
+    let rows = [];
+    detailWords.forEach(w=>{
+      let row = rows.find(r=>Math.abs(r.cy - w.cy) < 15);
+      if(row){ row.words.push(w); }
+      else   { rows.push({cy:w.cy, words:[w]}); }
+    });
+    rows.sort((a,b)=>a.cy-b.cy);
+
+    // 各行から品名・数量・単価を抽出
+    let resultItems = [];
+    rows.forEach(row=>{
+      let nameWords  = row.words.filter(w=>w.cx < boundQty).sort((a,b)=>a.cx-b.cx);
+      let qtyWords   = row.words.filter(w=>w.cx >= boundQty   && w.cx < boundPrice).sort((a,b)=>a.cx-b.cx);
+      let priceWords = row.words.filter(w=>w.cx >= boundPrice && w.cx < boundAmt ).sort((a,b)=>a.cx-b.cx);
+
+      let name  = nameWords.map(w=>w.text).join("");
+      let qtyStr   = qtyWords.map(w=>w.text).join("").replace(/,/g,"");
+      let priceStr = priceWords.map(w=>w.text).join("").replace(/,/g,"");
+
+      let qty   = parseInt(qtyStr);
+      let price = parseInt(priceStr);
+
+      // 品名があり、数量・単価が有効な数値の行のみ採用
+      if(!name || name.length < 2) return;
+      if(isNaN(qty)   || qty<=0   || qty>9999)    return;
+      if(isNaN(price) || price<=0 || price>999999) return;
+
+      // NGワードフィルタ
+      let ng = ["銀行","支店","口座","TEL","FAX","電話","振込","郵便"];
+      if(ng.some(w=>name.includes(w))) return;
+
+      resultItems.push({name, qty, price});
+    });
 
     // フォームに反映
-    if(parsed.customer) customer.value = parsed.customer;
-
-    if(parsed.items && parsed.items.length > 0){
-      items.innerHTML = "";
-      parsed.items.forEach(it=>{
-        let div = document.createElement("div");
-        div.className = "row";
-        div.innerHTML = `
-          <input class="n" value="${it.name||''}">
-          <input class="q" value="${it.qty||''}" type="number" oninput="calc()">
-          <input class="p" value="${it.price||''}" type="number" oninput="calc()">
-        `;
-        items.appendChild(div);
-      });
-      calc();
+    if(resultItems.length === 0){
+      addItem();
+      status.style.color = "#e65100";
+      status.textContent = "⚠️ 商品行を検出できませんでした。手動で入力してください";
+      return;
     }
+
+    items.innerHTML = "";
+    resultItems.forEach(it=>{
+      let div = document.createElement("div");
+      div.className = "row";
+      div.innerHTML = `
+        <input class="n" value="${it.name}">
+        <input class="q" value="${it.qty}" type="number" oninput="calc()">
+        <input class="p" value="${it.price}" type="number" oninput="calc()">
+      `;
+      items.appendChild(div);
+    });
+    calc();
 
     status.style.color = "#43a047";
     status.textContent = "✅ 読み取り完了！内容を確認してください";
@@ -815,18 +894,12 @@ window.scanImage = async function(event){
   } catch(e) {
     status.style.color = "#e53935";
     status.textContent = "❌ 読み取り失敗：" + e.message;
-    console.error("scan error:", e);
-    // レスポンス詳細も表示
-    if(typeof data !== "undefined"){
-      console.error("API response:", JSON.stringify(data));
-      status.textContent += " / " + JSON.stringify(data).slice(0,120);
-    }
+    console.error(e);
+    addItem();
   }
 
-  // inputをリセット（同じファイルを再選択できるように）
   event.target.value = "";
 };
-
 </script>
 
 </body>
