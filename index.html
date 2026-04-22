@@ -918,8 +918,7 @@ async function processImage(blob){
 
     // 取引先名抽出
     const fullText = data.fullTextAnnotation?.text||"";
-    let lines = fullText.split("\n").map(v=>v.trim()).filter(v=>v);
-    if(rotated) lines=lines.reverse();
+    let lines = fullText.split("\n").map(v=>v.trim()).filter(v=>v);if(rotated) lines=lines.reverse();
     let customerName="";
     for(let i=0;i<lines.length;i++){
       if(lines[i].includes("様")){
