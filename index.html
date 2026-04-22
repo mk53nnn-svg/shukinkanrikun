@@ -740,48 +740,42 @@ window.scanImage = async function(event){
     let mediaType = file.type || "image/jpeg";
 
     // Anthropic API呼び出し
-    let response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1000,
-        messages: [{
-          role: "user",
-          content: [
-            {
-              type: "image",
-              source: { type: "base64", media_type: mediaType, data: base64 }
-            },
-            {
-              type: "text",
-              text: `この請求書・納品書の画像から以下の情報をJSONで返してください。
-必ずJSONのみ返し、説明文やマークダウンは不要です。
+    let response;
+    let data;
+    try {
+      response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 1000,
+          messages: [{
+            role: "user",
+            content: [
+              {
+                type: "image",
+                source: { type: "base64", media_type: mediaType, data: base64 }
+              },
+              {
+                type: "text",
+                text: "この請求書・納品書の画像から以下の情報をJSONのみで返してください。説明文不要。{"customer":"取引先名(様の前まで)","items":[{"name":"商品名","qty":数量の数値,"price":単価の数値}]} ルール:品名欄で数量と単価両方に数字がある行のみ含める。数値はカンマなし整数。"
+              }
+            ]
+          }]
+        })
+      });
+    } catch(fetchErr) {
+      throw new Error("通信エラー: " + fetchErr.message + " (URL到達不可またはCORS)");
+    }
 
-{
-  "customer": "取引先名（「様」の前まで。複数行にまたがる場合は全て繋げる）",
-  "items": [
-    {"name": "商品名", "qty": 数量(数値), "price": 単価(数値)},
-    ...
-  ]
-}
-
-ルール：
-- 品名欄の行のうち、同じ行に数量と単価の両方に数字があるものだけitemsに含める
-- 数量・単価が空欄またはない行はスキップ
-- 金額列は無視（数量×単価で計算するため）
-- 取引先名は「様」を含めず、その直前まで
-- 数値はカンマなしの整数で返す`
-            }
-          ]
-        }]
-      })
-    });
-
-    let data = await response.json();
+    try {
+      data = await response.json();
+    } catch(jsonErr) {
+      throw new Error("レスポンス解析失敗: HTTP " + response.status);
+    }
 
     if(!response.ok){
-      throw new Error(data.error?.message || "API error");
+      throw new Error("APIエラー " + response.status + ": " + (data.error?.message || JSON.stringify(data).slice(0,100)));
     }
 
     let text = data.content.map(c=>c.text||"").join("");
