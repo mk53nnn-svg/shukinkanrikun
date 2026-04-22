@@ -25,6 +25,7 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold}
 .red{background:#e53935}
 .green{background:#43a047}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
 
 <body>
@@ -353,6 +354,134 @@ currentUser=saved;
 start();
 }
 }
+window.scanImage = async function(event){
+
+let file = event.target.files[0];
+if(!file) return;
+
+let status = document.getElementById("scanStatus");
+status.style.color="#1976d2";
+status.textContent="🔄 文字を読み取り中...";
+
+try{
+
+const { data:{ text } } = await Tesseract.recognize(
+file,
+'jpn+eng',
+{
+logger:m=>{
+if(m.status==="recognizing text"){
+status.textContent="🔄 読み取り中 " + Math.floor(m.progress*100) + "%";
+}
+}
+}
+);
+
+let lines = text.split("\n")
+.map(v=>v.trim())
+.filter(v=>v);
+
+
+// --------------------
+// 取引先名抽出
+// --------------------
+let customerName = "";
+
+for(let i=0;i<lines.length;i++){
+
+if(lines[i].includes("様")){
+
+customerName = lines[i].replace("様","").trim();
+
+if(i>=1 && lines[i-1].length>5){
+customerName = lines[i-1] + " " + customerName;
+}
+
+break;
+}
+}
+
+if(customerName){
+document.getElementById("customer").value = customerName;
+}
+
+
+// --------------------
+// 商品抽出
+// 数量 単価 金額ある行のみ
+// --------------------
+let resultItems = [];
+
+for(let line of lines){
+
+let nums = line.match(/[\d,]+/g);
+if(!nums) continue;
+
+if(nums.length < 3) continue;
+
+let qty   = Number(nums[0].replace(/,/g,""));
+let price = Number(nums[1].replace(/,/g,""));
+
+if(qty<=0 || price<=0) continue;
+
+let name = line
+.replace(/[\d,]+/g,"")
+.replace(/\s+/g," ")
+.trim();
+
+if(name.length < 2) continue;
+
+resultItems.push({
+name:name,
+qty:qty,
+price:price
+});
+}
+
+
+// --------------------
+// フォーム反映
+// --------------------
+if(resultItems.length>0){
+
+items.innerHTML="";
+
+resultItems.forEach(it=>{
+
+let div=document.createElement("div");
+div.className="row";
+
+div.innerHTML=`
+<input class="n" value="${it.name}">
+<input class="q" value="${it.qty}" type="number" oninput="calc()">
+<input class="p" value="${it.price}" type="number" oninput="calc()">
+`;
+
+items.appendChild(div);
+
+});
+
+calc();
+
+}else{
+addItem();
+}
+
+status.style.color="#43a047";
+status.textContent="✅ 読み取り完了（確認して保存してください）";
+
+}catch(e){
+
+status.style.color="#e53935";
+status.textContent="❌ 読み取り失敗";
+
+console.error(e);
+
+}
+
+event.target.value="";
+
+};
 </script>
 
 </body>
