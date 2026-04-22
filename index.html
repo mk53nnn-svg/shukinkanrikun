@@ -114,7 +114,7 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
   <div id="listPage" class="card hidden">
     <h3>一覧</h3>
 
-
+```
 <div style="display:flex;gap:6px;margin-bottom:4px">
   <input id="searchBox" type="search" placeholder="🔍 取引先・商品名で検索" style="margin:0" onkeydown="if(event.key==='Enter'){this.blur();doSearch();}">
   <button onclick="doSearch()" style="width:auto;padding:10px 16px;margin:0;white-space:nowrap">検索</button>
@@ -141,7 +141,7 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
 </div>
 
 <div id="records"></div>
-
+```
 
   </div>
 
@@ -161,7 +161,7 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
     <input id="newPw" placeholder="パスワード">
     <button onclick="addUser()">追加</button>
 
-
+```
 <hr>
 
 <h4>💾 データバックアップ</h4>
@@ -175,7 +175,7 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
 <div style="font-size:12px;color:#999;margin-top:6px">
   最終バックアップ：<span id="lastBackupTime">未保存</span>
 </div>
-
+```
 
   </div>
 
@@ -511,11 +511,11 @@ function adminView(){
     let li=document.createElement("div");
     li.className="list drag-item";
     li.dataset.id=u;
-    li.draggable=true;
-    li.style.cssText="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;cursor:grab;touch-action:none";
+    li.draggable=false;
+    li.style.cssText="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px";
     li.innerHTML=`
       <div style="display:flex;align-items:center;gap:8px">
-        <span style="font-size:20px;color:#ccc;user-select:none">☰</span>
+        <span class="drag-handle" style="font-size:22px;color:#bbb;user-select:none;cursor:grab;padding:4px 6px;touch-action:none">☰</span>
         <span>ID:${u}　${users[u].name}　${users[u].admin?'<span style="color:#1976d2;font-size:12px">[管理者]</span>':''}</span>
       </div>
       <div>
@@ -533,56 +533,57 @@ function initDragSort(){
   let ul=document.getElementById("userList");
   let items=ul.querySelectorAll(".drag-item");
 
-  // --- PC: mouse drag ---
   items.forEach(item=>{
+    let handle=item.querySelector(".drag-handle");
+
+    // --- PC: mouseドラッグはhandleのみ ---
+    handle.addEventListener("mousedown",()=>{ item.draggable=true; });
+    item.addEventListener("dragend",()=>{ item.draggable=false; });
+
     item.addEventListener("dragstart",e=>{
       dragSrc=item;
-      item.style.opacity="0.4";
+      setTimeout(()=>item.style.opacity="0.4",0);
     });
     item.addEventListener("dragend",e=>{
       item.style.opacity="1";
+      item.draggable=false;
       saveNewOrder();
     });
     item.addEventListener("dragover",e=>{
       e.preventDefault();
-      let bounding=item.getBoundingClientRect();
-      let offset=e.clientY-bounding.top;
-      if(offset<bounding.height/2){
-        ul.insertBefore(dragSrc,item);
-      } else {
-        ul.insertBefore(dragSrc,item.nextSibling);
-      }
+      if(!dragSrc||dragSrc===item) return;
+      let b=item.getBoundingClientRect();
+      if(e.clientY<b.top+b.height/2){ ul.insertBefore(dragSrc,item); }
+      else { ul.insertBefore(dragSrc,item.nextSibling); }
     });
-  });
 
-  // --- Mobile: touch drag ---
-  items.forEach(item=>{
-    let touchStartY=0, clone=null;
-    item.addEventListener("touchstart",e=>{
-      touchStartY=e.touches[0].clientY;
+    // --- Mobile: touchはhandleのみ ---
+    let clone=null;
+    handle.addEventListener("touchstart",e=>{
+      e.stopPropagation();
       dragSrc=item;
       item.style.opacity="0.4";
-      // クローンで追従表示
       clone=item.cloneNode(true);
       clone.style.cssText="position:fixed;left:10px;right:10px;background:#e3f2fd;border-radius:10px;padding:10px;z-index:999;pointer-events:none;opacity:0.85;box-shadow:0 4px 12px rgba(0,0,0,.2)";
-      clone.style.top=e.touches[0].clientY+"px";
+      clone.style.top=(e.touches[0].clientY-30)+"px";
       document.body.appendChild(clone);
     },{passive:true});
-    item.addEventListener("touchmove",e=>{
+    handle.addEventListener("touchmove",e=>{
       if(!clone) return;
+      e.preventDefault();
       let y=e.touches[0].clientY;
       clone.style.top=(y-30)+"px";
-      // 挿入位置を決める
       let els=[...ul.querySelectorAll(".drag-item")].filter(el=>el!==dragSrc);
-      for(let el of els){
-        let b=el.getBoundingClientRect();
-        if(y<b.top+b.height/2){ ul.insertBefore(dragSrc,el); break; }
-        else if(el===els[els.length-1]){ ul.appendChild(dragSrc); }
+      for(let i=0;i<els.length;i++){
+        let b=els[i].getBoundingClientRect();
+        if(y<b.top+b.height/2){ ul.insertBefore(dragSrc,els[i]); break; }
+        else if(i===els.length-1){ ul.appendChild(dragSrc); }
       }
-    },{passive:true});
-    item.addEventListener("touchend",e=>{
+    },{passive:false});
+    handle.addEventListener("touchend",e=>{
       item.style.opacity="1";
       if(clone){ clone.remove(); clone=null; }
+      dragSrc=null;
       saveNewOrder();
     });
   });
