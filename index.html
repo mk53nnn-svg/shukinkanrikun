@@ -773,26 +773,23 @@ window.scanImage = async function(event){
       });
     });
 
-    // 商品欄エリア
-    // この帳票のレイアウト（実測）:
-    //   品名列:  left5% 〜 right45%
-    //   数量列:  45% 〜 57%
-    //   単価列:  57% 〜 70%
-    //   金額列:  70% 〜 83%  ← 不要
-    //   備考列:  83% 〜      ← 不要
-    //   銀行欄:  右側全体    ← 除外
-    // 明細行: top48% 〜 bottom78%
+    // 商品欄エリア（実測座標から算出）
+    // maxX=3790 maxY=2582 のケースで検証済み
+    // 品名列:  x 2%〜38%
+    // 数量列:  x 42%〜50%
+    // 単価列:  x 50%〜64%
+    // 明細行:  y 55%〜82%
     const area = {
-      left:   maxX * 0.05,
-      right:  maxX * 0.70,   // 金額列の左端まで
-      top:    maxY * 0.48,
-      bottom: maxY * 0.78
+      left:   maxX * 0.02,
+      right:  maxX * 0.64,
+      top:    maxY * 0.55,
+      bottom: maxY * 0.82
     };
 
     // 列の境界（X座標の割合）
-    const colQtyLeft   = maxX * 0.44;  // 数量列の左端
-    const colPriceLeft = maxX * 0.56;  // 単価列の左端
-    const colPriceRight= maxX * 0.70;  // 単価列の右端
+    const colQtyLeft   = maxX * 0.42;  // 数量列の左端
+    const colPriceLeft = maxX * 0.50;  // 単価列の左端
+    const colPriceRight= maxX * 0.64;  // 単価列の右端
 
     // エリア内の文字を抽出
     let productWords = [];
@@ -815,16 +812,7 @@ window.scanImage = async function(event){
       row.items.push(w);
     });
 
-    // デバッグ：エリア内の全ワードをalertで表示
-    let dbg = "maxX:"+Math.round(maxX)+" maxY:"+Math.round(maxY);
-    dbg += "\nエリア top:"+Math.round(maxY*0.48)+" bottom:"+Math.round(maxY*0.78);
-    dbg += "\ncolQty:"+Math.round(maxX*0.44)+" colPrice:"+Math.round(maxX*0.56);
-    dbg += "\n\nエリア内ワード数:"+productWords.length;
-    dbg += "\n全ワード(最初20個):";
-    productWords.slice(0,20).forEach(w=>{
-      dbg += "\n["+w.text+"] x:"+Math.round(w.x)+" y:"+Math.round(w.y);
-    });
-    alert(dbg);
+
 
     // 各行を解析
     let resultItems=[];
