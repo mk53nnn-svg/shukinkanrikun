@@ -815,6 +815,17 @@ window.scanImage = async function(event){
       row.items.push(w);
     });
 
+    // デバッグ：エリア内の全ワードをalertで表示
+    let dbg = "maxX:"+Math.round(maxX)+" maxY:"+Math.round(maxY);
+    dbg += "\nエリア top:"+Math.round(maxY*0.48)+" bottom:"+Math.round(maxY*0.78);
+    dbg += "\ncolQty:"+Math.round(maxX*0.44)+" colPrice:"+Math.round(maxX*0.56);
+    dbg += "\n\nエリア内ワード数:"+productWords.length;
+    dbg += "\n全ワード(最初20個):";
+    productWords.slice(0,20).forEach(w=>{
+      dbg += "\n["+w.text+"] x:"+Math.round(w.x)+" y:"+Math.round(w.y);
+    });
+    alert(dbg);
+
     // 各行を解析
     let resultItems=[];
     rows.forEach(r=>{
