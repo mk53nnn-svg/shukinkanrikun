@@ -773,23 +773,16 @@ window.scanImage = async function(event){
       });
     });
 
-    // 商品欄エリア（実測座標から算出）
-    // maxX=3790 maxY=2582 のケースで検証済み
-    // 品名列:  x 2%〜38%
-    // 数量列:  x 42%〜50%
-    // 単価列:  x 50%〜64%
-    // 明細行:  y 55%〜82%
+    // 商品欄エリア：まず全体を取得してデバッグ
     const area = {
-      left:   maxX * 0.02,
-      right:  maxX * 0.64,
-      top:    maxY * 0.55,
-      bottom: maxY * 0.82
+      left:   0,
+      right:  maxX,
+      top:    0,
+      bottom: maxY
     };
-
-    // 列の境界（X座標の割合）
-    const colQtyLeft   = maxX * 0.42;  // 数量列の左端
-    const colPriceLeft = maxX * 0.50;  // 単価列の左端
-    const colPriceRight= maxX * 0.64;  // 単価列の右端
+    const colQtyLeft   = maxX * 0.42;
+    const colPriceLeft = maxX * 0.50;
+    const colPriceRight= maxX * 0.64;
 
     // エリア内の文字を抽出
     let productWords = [];
@@ -813,6 +806,16 @@ window.scanImage = async function(event){
     });
 
 
+
+    // デバッグ：カラーモール・キラキラモールを含む行を探す
+    let dbg2 = "全行数:"+rows.length+"\n";
+    rows.forEach((r,ri)=>{
+      let txt = r.items.map(t=>t.text+"(x:"+Math.round(t.x)+")").join(" ");
+      dbg2 += "行"+ri+"[y:"+Math.round(r.y)+"]: "+txt+"\n";
+    });
+    // 長すぎる場合は分割
+    alert(dbg2.slice(0,600));
+    if(dbg2.length>600) alert(dbg2.slice(600,1200));
 
     // 各行を解析
     let resultItems=[];
