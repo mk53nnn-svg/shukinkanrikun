@@ -369,40 +369,84 @@ if(!file) return;
 
 let status = document.getElementById("scanStatus");
 status.style.color="#1976d2";
-status.textContent="🔄 文字を読み取り中...";
+status.textContent="🔄 納品書を解析中...";
 
 try{
 
-const { data:{ text } } = await Tesseract.recognize(
-file,
-'jpn+eng',
-{
-logger:m=>{
-if(m.status==="recognizing text"){
-status.textContent="🔄 読み取り中 " + Math.floor(m.progress*100) + "%";
+// ======================
+// 画像読み込み
+// ======================
+const img = new Image();
+img.src = URL.createObjectURL(file);
+await new Promise(r => img.onload = r);
+
+const W = img.width;
+const H = img.height;
+
+
+// ======================
+// 共通関数
+// ======================
+async function readArea(x,y,w,h,lang='jpn+eng'){
+
+const canvas = document.createElement("canvas");
+const ctx = canvas.getContext("2d");
+
+canvas.width = w*2;
+canvas.height = h*2;
+
+// 切り抜き＋2倍拡大
+ctx.drawImage(img,x,y,w,h,0,0,canvas.width,canvas.height);
+
+// 白黒強調
+let imageData = ctx.getImageData(0,0,canvas.width,canvas.height);
+let d = imageData.data;
+
+for(let i=0;i<d.length;i+=4){
+let avg=(d[i]+d[i+1]+d[i+2])/3;
+let v = avg > 180 ? 255 : 0;
+d[i]=d[i+1]=d[i+2]=v;
 }
+
+ctx.putImageData(imageData,0,0);
+
+const result = await Tesseract.recognize(canvas,lang);
+return result.data.text;
 }
-}
+
+
+
+// ======================
+// 左上：取引先名
+// ======================
+status.textContent="🔄 取引先名を読み取り中...";
+
+let customerText = await readArea(
+0,
+0,
+W*0.55,
+H*0.25
 );
 
-let lines = text.split("\n")
+let customerLines = customerText
+.split("\n")
 .map(v=>v.trim())
 .filter(v=>v);
 
+let customerName="";
 
-// --------------------
-// 取引先名抽出
-// --------------------
-let customerName = "";
+for(let i=0;i<customerLines.length;i++){
 
-for(let i=0;i<lines.length;i++){
+if(customerLines[i].includes("様")){
 
-if(lines[i].includes("様")){
+customerName = customerLines[i]
+.replace("様","")
+.replace(/\s+/g," ")
+.trim();
 
-customerName = lines[i].replace("様","").trim();
-
-if(i>=1 && lines[i-1].length>5){
-customerName = lines[i-1] + " " + customerName;
+if(i>=1 && customerLines[i-1].length>5){
+customerName =
+customerLines[i-1]+" "+customerName;
 }
 
 break;
@@ -410,49 +454,77 @@ break;
 }
 
 if(customerName){
-document.getElementById("customer").value = customerName;
+customer.value = customerName;
 }
 
 
-// --------------------
-// 商品抽出
-// 数量 単価 金額ある行のみ
-// --------------------
-let resultItems = [];
+
+// ======================
+// 表部分：商品一覧
+// ======================
+status.textContent="🔄 商品欄を読み取り中...";
+
+let tableText = await readArea(
+W*0.03,
+H*0.30,
+W*0.94,
+H*0.48
+);
+
+let lines = tableText
+.split("\n")
+.map(v=>v.trim())
+.filter(v=>v);
+
+
+// ======================
+// 行解析
+// ======================
+let resultItems=[];
 
 for(let line of lines){
 
+// 数字3つ以上ない行除外
 let nums = line.match(/[\d,]+/g);
-if(!nums) continue;
+if(!nums || nums.length < 3) continue;
 
-if(nums.length < 3) continue;
-
-let qty   = Number(nums[0].replace(/,/g,""));
+// 数量・単価
+let qty = Number(nums[0].replace(/,/g,""));
 let price = Number(nums[1].replace(/,/g,""));
 
 if(qty<=0 || price<=0) continue;
 
+// 商品名生成
 let name = line
 .replace(/[\d,]+/g,"")
+.replace(/[¥円]/g,"")
 .replace(/\s+/g," ")
 .trim();
 
-if(name.length < 2) continue;
+if(name.length < 3) continue;
+
+// 明細説明文除外
+if(name.match(/赤|青|黄|白|黒|税込|税抜/)) continue;
 
 resultItems.push({
 name:name,
 qty:qty,
 price:price
 });
+
+if(resultItems.length>=6) break;
 }
 
 
-// --------------------
-// フォーム反映
-// --------------------
-if(resultItems.length>0){
 
+// ======================
+// フォーム反映
+// ======================
 items.innerHTML="";
+
+if(resultItems.length===0){
+addItem();
+}else{
 
 resultItems.forEach(it=>{
 
@@ -461,29 +533,27 @@ div.className="row";
 
 div.innerHTML=`
 <input class="n" value="${it.name}">
-<input class="q" value="${it.qty}" type="number" oninput="calc()">
-<input class="p" value="${it.price}" type="number" oninput="calc()">
+<input class="q" type="number" value="${it.qty}" oninput="calc()">
+<input class="p" type="number" value="${it.price}" oninput="calc()">
 `;
 
 items.appendChild(div);
 
 });
 
-calc();
-
-}else{
-addItem();
 }
+
+calc();
 
 status.style.color="#43a047";
 status.textContent="✅ 読み取り完了（確認して保存してください）";
 
 }catch(e){
 
+console.error(e);
+
 status.style.color="#e53935";
 status.textContent="❌ 読み取り失敗";
-
-console.error(e);
 
 }
 
