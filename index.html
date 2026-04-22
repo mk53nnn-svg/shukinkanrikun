@@ -778,11 +778,17 @@ window.scanImage = async function(event){
       throw new Error("APIエラー " + response.status + ": " + (data.error?.message || JSON.stringify(data).slice(0,100)));
     }
 
+    console.log("API response:", JSON.stringify(data).slice(0,300));
+
+    if(!data.content){
+      throw new Error("レスポンス異常: " + JSON.stringify(data).slice(0,150));
+    }
+
     let text = data.content.map(c=>c.text||"").join("");
 
     // JSON部分だけ抽出
     let jsonMatch = text.match(/\{[\s\S]*\}/);
-    if(!jsonMatch) throw new Error("JSONが見つかりませんでした");
+    if(!jsonMatch) throw new Error("JSONが見つかりませんでした / AI応答:" + text.slice(0,100));
     let parsed = JSON.parse(jsonMatch[0]);
 
     // フォームに反映
