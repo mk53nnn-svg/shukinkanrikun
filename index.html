@@ -233,6 +233,7 @@ let abcDir        = 1;
 let currentFilter = "all";
 let currentStaff  = "all";
 let recordsCache  = [];
+let userOrder     = [];  // 社員の表示順（IDの配列）
 
 /* ===== LOADING ===== */
 function showLoading(msg="読み込み中…"){
@@ -248,8 +249,20 @@ async function loadUsers(){
   const snap = await get(ref(db,"users"));
   if(snap.exists()){ users = snap.val(); }
   else { await set(ref(db,"users"), users); }
+  // userOrder を Firebase から読み込み
+  const orderSnap = await get(ref(db,"userOrder"));
+  if(orderSnap.exists()){
+    userOrder = orderSnap.val();
+    // usersに存在するIDだけ残し、新規IDは末尾に追加
+    userOrder = userOrder.filter(id=>users[id]);
+    Object.keys(users).forEach(id=>{ if(!userOrder.includes(id)) userOrder.push(id); });
+  } else {
+    userOrder = Object.keys(users);
+    await set(ref(db,"userOrder"), userOrder);
+  }
 }
 async function saveUsers(){ await set(ref(db,"users"), users); }
+async function saveUserOrder(){ await set(ref(db,"userOrder"), userOrder); }
 
 /* ===== FIREBASE: RECORDS ===== */
 function listenRecords(){
@@ -382,8 +395,7 @@ function buildStaffFilter(){
   if(!bar||!wrap) return;
   wrap.classList.remove("hidden");
   let html=`<button id="sf-all" onclick="setStaff('all')" class="${currentStaff==='all'?'active':''}">全員</button>`;
-  Object.keys(users).forEach(u=>{
-    if(users[u].admin) return;
+  userOrder.filter(u=>users[u]&&!users[u].admin).forEach(u=>{
     html+=`<button id="sf-${u}" onclick="setStaff('${u}')" class="${currentStaff===u?'active':''}">${users[u].name}</button>`;
   });
   bar.innerHTML=html;
@@ -483,38 +495,129 @@ function summaryView(){
 function adminView(){
   if(!currentUser||!users[currentUser]?.admin) return;
   let d=getData(), html="";
-  Object.keys(users).forEach(u=>{
-    if(users[u].admin) return;
+  // 売上残を userOrder 順で表示（管理者除く）
+  userOrder.filter(u=>users[u]&&!users[u].admin).forEach(u=>{
     let remain=d.filter(x=>x.user===u&&!x.paid).reduce((a,b)=>a+b.total,0);
     html+=`${users[u].name}：¥${remain}<br>`;
   });
   adminSummaryTop.innerHTML=html;
   buildStaffFilter(); updateBackupTime();
-  userList.innerHTML="";
-  Object.keys(users).forEach(u=>{
-    userList.innerHTML+=`
-      <div class="list" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">
-        <div>ID:${u}　名前:${users[u].name}　${users[u].admin?'<span style="color:#1976d2;font-size:12px">[管理者]</span>':''}</div>
-        <div>
-          <button class="small" onclick="openEditUserModal('${u}')">編集</button>
-          <button class="small" onclick="delUser('${u}')">削除</button>
-        </div>
+
+  // 社員リスト（ドラッグ＆ドロップで並び替え）
+  let ul=document.getElementById("userList");
+  ul.innerHTML="";
+  userOrder.forEach(u=>{
+    if(!users[u]) return;
+    let li=document.createElement("div");
+    li.className="list drag-item";
+    li.dataset.id=u;
+    li.draggable=true;
+    li.style.cssText="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;cursor:grab;touch-action:none";
+    li.innerHTML=`
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:20px;color:#ccc;user-select:none">☰</span>
+        <span>ID:${u}　${users[u].name}　${users[u].admin?'<span style="color:#1976d2;font-size:12px">[管理者]</span>':''}</span>
+      </div>
+      <div>
+        <button class="small" onclick="openEditUserModal('${u}')">編集</button>
+        <button class="small" onclick="delUser('${u}')">削除</button>
       </div>`;
+    ul.appendChild(li);
   });
+  initDragSort();
+}
+
+/* ===== DRAG SORT ===== */
+let dragSrc=null;
+function initDragSort(){
+  let ul=document.getElementById("userList");
+  let items=ul.querySelectorAll(".drag-item");
+
+  // --- PC: mouse drag ---
+  items.forEach(item=>{
+    item.addEventListener("dragstart",e=>{
+      dragSrc=item;
+      item.style.opacity="0.4";
+    });
+    item.addEventListener("dragend",e=>{
+      item.style.opacity="1";
+      saveNewOrder();
+    });
+    item.addEventListener("dragover",e=>{
+      e.preventDefault();
+      let bounding=item.getBoundingClientRect();
+      let offset=e.clientY-bounding.top;
+      if(offset<bounding.height/2){
+        ul.insertBefore(dragSrc,item);
+      } else {
+        ul.insertBefore(dragSrc,item.nextSibling);
+      }
+    });
+  });
+
+  // --- Mobile: touch drag ---
+  items.forEach(item=>{
+    let touchStartY=0, clone=null;
+    item.addEventListener("touchstart",e=>{
+      touchStartY=e.touches[0].clientY;
+      dragSrc=item;
+      item.style.opacity="0.4";
+      // クローンで追従表示
+      clone=item.cloneNode(true);
+      clone.style.cssText="position:fixed;left:10px;right:10px;background:#e3f2fd;border-radius:10px;padding:10px;z-index:999;pointer-events:none;opacity:0.85;box-shadow:0 4px 12px rgba(0,0,0,.2)";
+      clone.style.top=e.touches[0].clientY+"px";
+      document.body.appendChild(clone);
+    },{passive:true});
+    item.addEventListener("touchmove",e=>{
+      if(!clone) return;
+      let y=e.touches[0].clientY;
+      clone.style.top=(y-30)+"px";
+      // 挿入位置を決める
+      let els=[...ul.querySelectorAll(".drag-item")].filter(el=>el!==dragSrc);
+      for(let el of els){
+        let b=el.getBoundingClientRect();
+        if(y<b.top+b.height/2){ ul.insertBefore(dragSrc,el); break; }
+        else if(el===els[els.length-1]){ ul.appendChild(dragSrc); }
+      }
+    },{passive:true});
+    item.addEventListener("touchend",e=>{
+      item.style.opacity="1";
+      if(clone){ clone.remove(); clone=null; }
+      saveNewOrder();
+    });
+  });
+}
+
+async function saveNewOrder(){
+  let items=document.getElementById("userList").querySelectorAll(".drag-item");
+  userOrder=[...items].map(el=>el.dataset.id);
+  // 売上残も即更新
+  let d=getData(), html="";
+  userOrder.filter(u=>users[u]&&!users[u].admin).forEach(u=>{
+    let remain=d.filter(x=>x.user===u&&!x.paid).reduce((a,b)=>a+b.total,0);
+    html+=`${users[u].name}：¥${remain}<br>`;
+  });
+  adminSummaryTop.innerHTML=html;
+  buildStaffFilter();
+  await saveUserOrder();
 }
 
 /* ===== USER ADD / DEL ===== */
 window.addUser = async function(){
   if(!newId.value||!newName.value||!newPw.value){ alert("全項目を入力してください"); return; }
   users[newId.value]={pass:newPw.value,name:newName.value,admin:false};
-  showLoading("保存中…"); try { await saveUsers(); } finally { hideLoading(); }
+  userOrder.push(newId.value);
+  showLoading("保存中…");
+  try { await saveUsers(); await saveUserOrder(); } finally { hideLoading(); }
   newId.value=newName.value=newPw.value=""; adminView();
 };
 window.delUser = async function(id){
   if(id==="yamamoto") return alert("削除不可");
   if(!confirm(users[id].name+"を削除しますか？")) return;
   delete users[id];
-  showLoading("削除中…"); try { await saveUsers(); } finally { hideLoading(); }
+  userOrder=userOrder.filter(u=>u!==id);
+  showLoading("削除中…");
+  try { await saveUsers(); await saveUserOrder(); } finally { hideLoading(); }
   adminView();
 };
 
