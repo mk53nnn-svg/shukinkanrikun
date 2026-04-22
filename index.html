@@ -69,12 +69,12 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
 ```
 <!-- 暗転マスク（ガイド外） -->
 <div style="position:absolute;top:0;left:0;right:0;height:12%;background:rgba(0,0,0,0.6)"></div>
-<div style="position:absolute;bottom:0;left:0;right:0;height:28%;background:rgba(0,0,0,0.6)"></div>
-<div style="position:absolute;top:12%;bottom:28%;left:0;width:3%;background:rgba(0,0,0,0.6)"></div>
-<div style="position:absolute;top:12%;bottom:28%;right:0;width:3%;background:rgba(0,0,0,0.6)"></div>
+<div style="position:absolute;bottom:0;left:0;right:0;height:15%;background:rgba(0,0,0,0.6)"></div>
+<div style="position:absolute;top:12%;bottom:15%;left:0;width:3%;background:rgba(0,0,0,0.6)"></div>
+<div style="position:absolute;top:12%;bottom:15%;right:0;width:3%;background:rgba(0,0,0,0.6)"></div>
 
 <!-- ガイド枠（帳票の商品明細エリア） -->
-<div style="position:absolute;top:12%;bottom:28%;left:3%;right:3%;border:2px solid #43a047">
+<div style="position:absolute;top:12%;bottom:15%;left:3%;right:3%;border:2px solid #43a047">
 
   <!-- 四隅マーカー -->
   <div style="position:absolute;top:-2px;left:-2px;width:18px;height:18px;border-top:4px solid #fff;border-left:4px solid #fff"></div>
@@ -915,7 +915,7 @@ async function processBlob(blob){
     const guideLeft   = maxX2 * 0.03;
     const guideRight  = maxX2 * 0.97;
     const guideTop    = maxY2 * 0.12;
-    const guideBottom = maxY2 * 0.72;
+    const guideBottom = maxY2 * 0.85;
     const guideWidth  = guideRight - guideLeft;
 
     const area = {
@@ -942,7 +942,7 @@ async function processBlob(blob){
     productWords.sort((a,b)=>a.y-b.y);
     let rows=[];
     productWords.forEach(w=>{
-      let row=rows.find(r=>Math.abs(r.y-w.y)<18);
+      let row=rows.find(r=>Math.abs(r.y-w.y)<28);
       if(!row){row={y:w.y,items:[]}; rows.push(row);}
       row.items.push(w);
     });
