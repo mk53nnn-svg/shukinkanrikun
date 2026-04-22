@@ -773,15 +773,26 @@ window.scanImage = async function(event){
       });
     });
 
-    // 商品欄エリア（帳票の構造に合わせた割合）
-    // 写真を見ると：銀行欄がtop38%付近、商品明細はtop48%〜bottom78%
-    // 右端は単価列まで（金額・備考・銀行欄を除外）
+    // 商品欄エリア
+    // この帳票のレイアウト（実測）:
+    //   品名列:  left5% 〜 right45%
+    //   数量列:  45% 〜 57%
+    //   単価列:  57% 〜 70%
+    //   金額列:  70% 〜 83%  ← 不要
+    //   備考列:  83% 〜      ← 不要
+    //   銀行欄:  右側全体    ← 除外
+    // 明細行: top48% 〜 bottom78%
     const area = {
       left:   maxX * 0.05,
-      right:  maxX * 0.78,
+      right:  maxX * 0.70,   // 金額列の左端まで
       top:    maxY * 0.48,
-      bottom: maxY * 0.80
+      bottom: maxY * 0.78
     };
+
+    // 列の境界（X座標の割合）
+    const colQtyLeft   = maxX * 0.44;  // 数量列の左端
+    const colPriceLeft = maxX * 0.56;  // 単価列の左端
+    const colPriceRight= maxX * 0.70;  // 単価列の右端
 
     // エリア内の文字を抽出
     let productWords = [];
@@ -808,20 +819,25 @@ window.scanImage = async function(event){
     let resultItems=[];
     rows.forEach(r=>{
       r.items.sort((a,b)=>a.x-b.x);
-      let nameParts=[], nums=[];
-      r.items.forEach(t=>{
-        if(/^[\d,]+$/.test(t.text)){ nums.push(t.text); }
-        else { nameParts.push(t.text); }
-      });
-      if(nums.length<2) return;
-      let qty   = Number(nums[0].replace(/,/g,""));
-      let price = Number(nums[1].replace(/,/g,""));
-      if(qty<=0 || price<=0) return;
-      let name = nameParts.join("")
+
+      // 列ごとに分類（X座標で判定）
+      let nameWords  = r.items.filter(t=>t.x <  colQtyLeft);
+      let qtyWords   = r.items.filter(t=>t.x >= colQtyLeft   && t.x < colPriceLeft);
+      let priceWords = r.items.filter(t=>t.x >= colPriceLeft && t.x < colPriceRight);
+
+      let name  = nameWords.map(t=>t.text).join("")
         .replace(/品名|数量|単価|金額|備考/g,"")
         .replace(/\s+/g,"").trim();
-      if(name.length<2) return;
-      if(name.match(/電話|TEL|FAX|〒|住所|銀行|口座|請求書|納品書/)) return;
+      let qtyStr   = qtyWords.map(t=>t.text).join("").replace(/,/g,"");
+      let priceStr = priceWords.map(t=>t.text).join("").replace(/,/g,"");
+
+      let qty   = parseInt(qtyStr);
+      let price = parseInt(priceStr);
+
+      if(!name || name.length<2) return;
+      if(isNaN(qty)   || qty<=0   || qty>9999)    return;
+      if(isNaN(price) || price<=0 || price>999999) return;
+      if(name.match(/電話|TEL|FAX|〒|住所|銀行|口座|浦和|川越|請求書|納品書|支店/)) return;
       if(resultItems.some(x=>x.name===name)) return;
       resultItems.push({name, qty, price});
     });
