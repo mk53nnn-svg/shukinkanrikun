@@ -781,10 +781,15 @@ window.scanImage = async function(event){
     let allX = words.map(w=>w.cx);
     let imgW  = Math.max(...allX);
 
-    // デバッグ：全ワード表示
-    console.log("imgW:", imgW);
-    console.log("words:", JSON.stringify(words.slice(0,50)));
-    status.textContent = "検出語数:" + words.length + " imgW:" + Math.round(imgW) + " 例:" + words.slice(0,5).map(w=>w.text+"("+Math.round(w.cx)+","+Math.round(w.cy)+")").join(" ");
+    // デバッグ：alertで確実に表示
+    let dbg = "語数:" + words.length + "\nimgW:" + Math.round(imgW);
+    dbg += "\n\nヘッダー検出:";
+    dbg += "\n品名X=" + (hinmeiHeader ? Math.round(hinmeiHeader.cx) : "未検出");
+    dbg += "\n数量X=" + (suryoHeader  ? Math.round(suryoHeader.cx)  : "未検出");
+    dbg += "\n単価X=" + (tankHeader   ? Math.round(tankHeader.cx)   : "未検出");
+    dbg += "\n\n最初の10語:";
+    words.slice(0,10).forEach(w=>{ dbg += "\n" + w.text + "(x:" + Math.round(w.cx) + " y:" + Math.round(w.cy) + ")"; });
+    alert(dbg);
 
     // ---- 取引先名抽出 ----
     // 「様」を含む行を探し、その行の左側テキストを結合
