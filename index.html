@@ -61,7 +61,15 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold}
 <h3>納品登録</h3>
 
 <button onclick="document.getElementById('scanInput').click()" style="background:#43a047">📷 写真から読み取る</button>
-<input type="file" id="scanInput" accept="image/*" capture="environment" class="hidden">
+
+<div id="scanStatus" style="font-size:13px;color:#1976d2;margin-bottom:8px;"></div>
+
+<input type="file"
+id="scanInput"
+accept="image/*"
+capture="environment"
+class="hidden"
+onchange="scanImage(event)">
 
 <input id="customer" placeholder="取引先名">
 <input id="date" type="date">
