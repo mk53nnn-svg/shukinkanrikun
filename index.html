@@ -815,7 +815,12 @@ window.scanImage = async function(event){
   } catch(e) {
     status.style.color = "#e53935";
     status.textContent = "❌ 読み取り失敗：" + e.message;
-    console.error(e);
+    console.error("scan error:", e);
+    // レスポンス詳細も表示
+    if(typeof data !== "undefined"){
+      console.error("API response:", JSON.stringify(data));
+      status.textContent += " / " + JSON.stringify(data).slice(0,120);
+    }
   }
 
   // inputをリセット（同じファイルを再選択できるように）
