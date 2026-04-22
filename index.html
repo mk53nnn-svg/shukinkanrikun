@@ -367,15 +367,19 @@ window.scanImage = async function(event){
 const file = event.target.files[0];
 if(!file) return;
 
-const API_KEY = "AIzaSyCM3fnY5zANATWM2Bwlx2KuBFBDFCtPtfE";
+// ===== APIキー =====
+const API_KEY = "ここにあなたのAPIキー";
+// ==================
 
 const status = document.getElementById("scanStatus");
 status.style.color = "#1976d2";
-status.textContent = "🔄 読み取り中...";
+status.textContent = "🔄 商品欄を読み取り中...";
 
 try{
 
+// --------------------
 // base64変換
+// --------------------
 const base64 = await new Promise((resolve,reject)=>{
   const reader = new FileReader();
   reader.onload = ()=>resolve(reader.result.split(",")[1]);
@@ -383,24 +387,20 @@ const base64 = await new Promise((resolve,reject)=>{
   reader.readAsDataURL(file);
 });
 
-// Google Vision API
+// --------------------
+// Vision API
+// --------------------
 const res = await fetch(
-  "https://vision.googleapis.com/v1/images:annotate?key="+API_KEY,
+"https://vision.googleapis.com/v1/images:annotate?key="+API_KEY,
 {
 method:"POST",
-headers:{
-"Content-Type":"application/json"
-},
+headers:{ "Content-Type":"application/json" },
 body:JSON.stringify({
 requests:[
 {
 image:{content:base64},
-features:[
-{type:"TEXT_DETECTION"}
-],
-imageContext:{
-languageHints:["ja","en"]
-}
+features:[{type:"DOCUMENT_TEXT_DETECTION"}],
+imageContext:{languageHints:["ja","en"]}
 }
 ]
 })
@@ -408,25 +408,144 @@ languageHints:["ja","en"]
 
 const json = await res.json();
 
-if(!json.responses || !json.responses[0]){
-throw new Error("API応答なし");
+const data = json.responses?.[0];
+if(!data) throw new Error("OCR失敗");
+
+const words = data.textAnnotations;
+if(!words || words.length<=1) throw new Error("文字なし");
+
+// ----------------------------------
+// 全体サイズ取得
+// ----------------------------------
+let maxX = 0;
+let maxY = 0;
+
+words.forEach(w=>{
+if(!w.boundingPoly || !w.boundingPoly.vertices) return;
+w.boundingPoly.vertices.forEach(v=>{
+if(v.x>maxX) maxX=v.x;
+if(v.y>maxY) maxY=v.y;
+});
+});
+
+// ----------------------------------
+// 商品欄エリア（中央表部分のみ）
+// 左8%〜右78%
+// 上28%〜下74%
+// ----------------------------------
+const area = {
+left:  maxX * 0.08,
+right: maxX * 0.78,
+top:   maxY * 0.28,
+bottom:maxY * 0.74
+};
+
+// ----------------------------------
+// 商品欄の文字だけ抽出
+// ----------------------------------
+let productWords = [];
+
+for(let i=1;i<words.length;i++){
+
+const w = words[i];
+const v = w.boundingPoly.vertices;
+
+const x = (v[0].x + v[1].x + v[2].x + v[3].x)/4;
+const y = (v[0].y + v[1].y + v[2].y + v[3].y)/4;
+
+if(
+x >= area.left &&
+x <= area.right &&
+y >= area.top &&
+y <= area.bottom
+){
+productWords.push({
+text:w.description,
+x:x,
+y:y
+});
+}
 }
 
-const text =
-json.responses[0].fullTextAnnotation?.text || "";
+// ----------------------------------
+// 行ごとにまとめる
+// ----------------------------------
+productWords.sort((a,b)=>a.y-b.y);
 
-if(!text){
-throw new Error("文字が取得できません");
+let rows = [];
+
+productWords.forEach(w=>{
+
+let row = rows.find(r=>Math.abs(r.y - w.y) < 18);
+
+if(!row){
+row = { y:w.y, items:[] };
+rows.push(row);
 }
 
-let lines = text.split("\n")
-.map(v=>v.trim())
-.filter(v=>v);
+row.items.push(w);
 
-// =======================
-// 取引先名抽出
-// =======================
+});
+
+// ----------------------------------
+// 商品抽出
+// 左=商品名 中=数量 右=単価
+// ----------------------------------
+let resultItems = [];
+
+rows.forEach(r=>{
+
+r.items.sort((a,b)=>a.x-b.x);
+
+let nameParts = [];
+let nums = [];
+
+r.items.forEach(t=>{
+
+if(/^[\d,]+$/.test(t.text)){
+nums.push(t.text);
+}else{
+nameParts.push(t.text);
+}
+
+});
+
+if(nums.length < 2) return;
+
+let qty = Number(nums[0].replace(/,/g,""));
+let price = Number(nums[1].replace(/,/g,""));
+
+if(qty<=0 || price<=0) return;
+
+let name = nameParts.join("");
+
+name = name
+.replace(/品名/g,"")
+.replace(/数量/g,"")
+.replace(/単価/g,"")
+.replace(/金額/g,"")
+.trim();
+
+if(name.length < 2) return;
+
+resultItems.push({
+name:name,
+qty:qty,
+price:price
+});
+
+});
+
+// 最大6件
+resultItems = resultItems.slice(0,6);
+
+// ----------------------------------
+// 取引先名（様行だけ全文OCRから取得）
+// ----------------------------------
 let customerName = "";
+
+const fullText = data.fullTextAnnotation?.text || "";
+const lines = fullText.split("\n");
 
 for(let i=0;i<lines.length;i++){
 
@@ -447,61 +566,17 @@ break;
 }
 
 if(customerName){
-document.getElementById("customer").value =
-customerName;
+document.getElementById("customer").value = customerName;
 }
 
-// =======================
-// 商品抽出
-// =======================
-let resultItems = [];
-
-for(let line of lines){
-
-// 数量 単価 金額 の3数字行のみ
-let nums = line.match(/[\d,]+/g);
-if(!nums) continue;
-if(nums.length < 3) continue;
-
-let qty   = Number(nums[0].replace(/,/g,""));
-let price = Number(nums[1].replace(/,/g,""));
-
-if(qty<=0 || price<=0) continue;
-
-// 商品名部分
-let name = line
-.replace(/[\d,]+/g," ")
-.replace(/\s+/g," ")
-.trim();
-
-// 不要文字除去
-name = name
-.replace(/品名/g,"")
-.replace(/数量/g,"")
-.replace(/単価/g,"")
-.replace(/金額/g,"")
-.trim();
-
-if(name.length < 2) continue;
-
-// 重複除去
-if(resultItems.some(x=>x.name===name)) continue;
-
-resultItems.push({
-name:name,
-qty:qty,
-price:price
-});
-
-if(resultItems.length>=6) break;
-}
-
-// =======================
+// ----------------------------------
 // フォーム反映
-// =======================
-if(resultItems.length>0){
-
+// ----------------------------------
 items.innerHTML="";
+
+if(resultItems.length===0){
+addItem();
+}else{
 
 resultItems.forEach(it=>{
 
@@ -518,23 +593,20 @@ items.appendChild(div);
 
 });
 
-calc();
-
-}else{
-addItem();
 }
 
+calc();
+
 status.style.color="#43a047";
-status.textContent =
-"✅ 読み取り完了（確認して保存してください）";
+status.textContent="✅ 商品欄のみ読み取り完了";
 
 }catch(e){
 
 console.error(e);
 
 status.style.color="#e53935";
-status.textContent =
-"❌ 読み取り失敗：" + e.message;
+status.textContent="❌ 読み取り失敗：" + e.message;
+
 }
 
 event.target.value="";
