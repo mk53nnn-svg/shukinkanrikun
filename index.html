@@ -367,21 +367,15 @@ window.scanImage = async function(event){
 const file = event.target.files[0];
 if(!file) return;
 
-// ==========================
-// Google Vision APIキー
-// ==========================
-const API_KEY = "AIzaSyCM3fnY5zANATWM2Bwlx2KuBFBDFCtPtfE";
-
-// ==========================
 const status = document.getElementById("scanStatus");
-status.style.color = "#1976d2";
-status.textContent = "🔄 納品書を解析中...";
+status.style.color="#1976d2";
+status.textContent="🔄 AI解析中...";
 
 try{
 
-// --------------------------
-// 画像 → base64
-// --------------------------
+/* =========================
+   画像base64化
+========================= */
 const base64 = await new Promise((resolve,reject)=>{
   const reader = new FileReader();
   reader.onload = ()=>resolve(reader.result.split(",")[1]);
@@ -389,259 +383,153 @@ const base64 = await new Promise((resolve,reject)=>{
   reader.readAsDataURL(file);
 });
 
-// --------------------------
-// Vision API 呼び出し
-// --------------------------
-const res = await fetch(
-"https://vision.googleapis.com/v1/images:annotate?key="+API_KEY,
+/* =========================
+   OpenAI Vision OCR
+========================= */
+const res = await fetch("https://api.openai.com/v1/chat/completions",{
+  method:"POST",
+  headers:{
+    "Content-Type":"application/json",
+    "Authorization":"Bearer あなたのAPIキー"
+  },
+  body:JSON.stringify({
+    model:"gpt-4o",
+    temperature:0,
+    messages:[
+      {
+        role:"system",
+        content:
+`あなたは納品書専用OCRです。
+
+この帳票は固定レイアウトです。
+絶対に中央の商品明細欄のみ読むこと。
+
+上部住所欄
+会社名
+電話番号
+FAX
+郵便番号
+銀行欄
+振込先欄
+支店名
+口座番号
+下部備考欄
+
+これらは100%無視。
+
+抽出対象は中央の表のみ。
+
+列:
+品名 / 数量 / 単価 / 金額
+
+ルール:
+1. 品名がある行のみ対象
+2. 数量・単価が数字の行のみ採用
+3. 電話番号・郵便番号・口座番号は禁止
+4. 3桁-4桁形式は無視
+5. 7桁以上連続数字は無視
+6. 金額だけの行は無視
+7. 品名に住所文字(市 区 町 丁目 番地 TEL FAX 銀行 支店 口座)があれば無視
+8. 数量は1〜999
+9. 単価は1〜100000
+10. 品名は商品らしい文字列のみ
+
+JSONのみ返す:
+
 {
-method:"POST",
-headers:{
-"Content-Type":"application/json"
-},
-body:JSON.stringify({
-requests:[
-{
-image:{content:base64},
-features:[
-{type:"DOCUMENT_TEXT_DETECTION"}
-],
-imageContext:{
-languageHints:["ja","en"]
-}
-}
-]
-})
+ "customer":"取引先名",
+ "items":[
+   {"name":"商品名","qty":1,"price":100}
+ ]
+}`
+      },
+      {
+        role:"user",
+        content:[
+          {type:"text",text:"この納品書画像を解析してください"},
+          {
+            type:"image_url",
+            image_url:{
+              url:`data:image/jpeg;base64,${base64}`
+            }
+          }
+        ]
+      }
+    ],
+    response_format:{type:"json_object"}
+  })
 });
 
 const json = await res.json();
 
-if(json.error){
-throw new Error(json.error.message);
+if(!json.choices){
+  throw new Error("APIエラー");
 }
 
-const data = json.responses?.[0];
+let txt = json.choices[0].message.content;
+let data = JSON.parse(txt);
 
-if(!data){
-throw new Error("OCR結果なし");
+/* =========================
+   顧客名
+========================= */
+if(data.customer){
+  customer.value = data.customer.replace(/様/g,"").trim();
 }
 
-const words = data.textAnnotations;
+/* =========================
+   商品データ強力フィルタ
+========================= */
+let ngWords = [
+"銀行","支店","普通","当座","口座",
+"埼玉","浦和","東京","市","区","町","丁目",
+"TEL","FAX","電話","住所","郵便"
+];
 
-if(!words || words.length<=1){
-throw new Error("文字認識できませんでした");
+let result = (data.items || []).filter(it=>{
+
+if(!it.name) return false;
+
+let name = String(it.name).trim();
+let qty  = Number(it.qty||0);
+let price= Number(it.price||0);
+
+/* 品名チェック */
+if(name.length < 2) return false;
+if(/[0-9]{7,}/.test(name)) return false;
+if(/[0-9]{3}\-[0-9]{4}/.test(name)) return false;
+
+/* NGワード */
+for(let w of ngWords){
+ if(name.includes(w)) return false;
 }
 
-// --------------------------
-// 全体サイズ取得
-// --------------------------
-let maxX = 0;
-let maxY = 0;
+/* 数量 */
+if(qty <=0 || qty>999) return false;
 
-words.forEach(w=>{
-if(!w.boundingPoly || !w.boundingPoly.vertices) return;
+/* 単価 */
+if(price<=0 || price>100000) return false;
 
-w.boundingPoly.vertices.forEach(v=>{
-if(v.x > maxX) maxX = v.x;
-if(v.y > maxY) maxY = v.y;
-});
-});
-
-// --------------------------
-// 商品欄だけ抽出
-// （この帳票専用）
-// --------------------------
-const area = {
-left:   maxX * 0.10,
-right:  maxX * 0.73,
-top:    maxY * 0.38,
-bottom: maxY * 0.68
-};
-
-// --------------------------
-// エリア内文字抽出
-// --------------------------
-let productWords = [];
-
-for(let i=1;i<words.length;i++){
-
-let w = words[i];
-let v = w.boundingPoly.vertices;
-
-let x = (
-(v[0].x||0)+
-(v[1].x||0)+
-(v[2].x||0)+
-(v[3].x||0)
-)/4;
-
-let y = (
-(v[0].y||0)+
-(v[1].y||0)+
-(v[2].y||0)+
-(v[3].y||0)
-)/4;
-
-if(
-x >= area.left &&
-x <= area.right &&
-y >= area.top &&
-y <= area.bottom
-){
-productWords.push({
-text:w.description,
-x:x,
-y:y
-});
-}
-
-}
-
-// --------------------------
-// Y座標で行まとめ
-// --------------------------
-productWords.sort((a,b)=>a.y-b.y);
-
-let rows = [];
-
-productWords.forEach(w=>{
-
-let row = rows.find(r=>Math.abs(r.y-w.y)<18);
-
-if(!row){
-row = { y:w.y, items:[] };
-rows.push(row);
-}
-
-row.items.push(w);
-
+return true;
 });
 
-// --------------------------
-// 行ごと解析
-// --------------------------
-let resultItems = [];
+/* =========================
+   表示
+========================= */
+items.innerHTML="";
 
-rows.forEach(r=>{
-
-r.items.sort((a,b)=>a.x-b.x);
-
-let nameParts = [];
-let nums = [];
-
-r.items.forEach(t=>{
-
-if(/^[\d,]+$/.test(t.text)){
-nums.push(t.text);
-}else{
-nameParts.push(t.text);
+if(result.length===0){
+  addItem();
+  status.style.color="#e53935";
+  status.textContent="❌ 商品欄を認識できませんでした";
+  return;
 }
 
-});
+result.forEach(it=>{
 
-if(nums.length < 2) return;
+let div=document.createElement("div");
+div.className="row";
 
-let qty = Number(nums[0].replace(/,/g,""));
-let price = Number(nums[1].replace(/,/g,""));
-
-if(qty<=0 || price<=0) return;
-
-let name = nameParts.join("");
-
-name = name
-.replace(/品名/g,"")
-.replace(/数量/g,"")
-.replace(/単価/g,"")
-.replace(/金額/g,"")
-.replace(/\s+/g,"")
-.trim();
-
-// 不要文字除外
-if(
-name.length < 2 ||
-name.match(/電話|TEL|FAX|〒|住所|銀行|口座|埼玉|医科|大学|請求書|納品書/)
-){
-return;
-}
-
-// 重複除外
-if(resultItems.some(x=>x.name===name)) return;
-
-resultItems.push({
-name:name,
-qty:qty,
-price:price
-});
-
-});
-
-// 最大6件
-resultItems = resultItems.slice(0,6);
-
-// --------------------------
-// 取引先名取得
-// --------------------------
-const fullText =
-data.fullTextAnnotation?.text || "";
-
-let lines = fullText.split("\n")
-.map(v=>v.trim())
-.filter(v=>v);
-
-let customerName = "";
-
-for(let i=0;i<lines.length;i++){
-
-if(lines[i].includes("様")){
-
-customerName =
-lines[i]
-.replace("様","")
-.replace(/御中/g,"")
-.trim();
-
-if(i>=1 && lines[i-1].length>5){
-customerName =
-lines[i-1] + " " + customerName;
-}
-
-break;
-}
-}
-
-if(customerName){
-document.getElementById("customer").value =
-customerName;
-}
-
-// --------------------------
-// 今日の日付セット
-// --------------------------
-let today = new Date();
-let yyyy = today.getFullYear();
-let mm = String(today.getMonth()+1).padStart(2,"0");
-let dd = String(today.getDate()).padStart(2,"0");
-
-document.getElementById("date").value =
-`${yyyy}-${mm}-${dd}`;
-
-// --------------------------
-// フォーム反映
-// --------------------------
-items.innerHTML = "";
-
-if(resultItems.length===0){
-
-addItem();
-
-}else{
-
-resultItems.forEach(it=>{
-
-let div = document.createElement("div");
-div.className = "row";
-
-div.innerHTML = `
+div.innerHTML=`
 <input class="n" value="${it.name}">
 <input class="q" value="${it.qty}" type="number" oninput="calc()">
 <input class="p" value="${it.price}" type="number" oninput="calc()">
@@ -651,27 +539,22 @@ items.appendChild(div);
 
 });
 
-}
-
 calc();
 
-status.style.color = "#43a047";
-status.textContent =
-"✅ 読み取り完了（内容確認してください）";
+status.style.color="#43a047";
+status.textContent="✅ 商品欄のみ読取完了";
 
-}catch(e){
+}catch(err){
 
-console.error(e);
-
-status.style.color = "#e53935";
-status.textContent =
-"❌ 読み取り失敗：" + e.message;
+console.error(err);
+status.style.color="#e53935";
+status.textContent="❌ OCR失敗";
 
 }
 
-event.target.value = "";
+event.target.value="";
 
-};
+}
 </script>
 
 </body>
