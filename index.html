@@ -367,19 +367,21 @@ window.scanImage = async function(event){
 const file = event.target.files[0];
 if(!file) return;
 
-// ===== APIキー =====
+// ==========================
+// Google Vision APIキー
+// ==========================
 const API_KEY = "AIzaSyCM3fnY5zANATWM2Bwlx2KuBFBDFCtPtfE";
-// ==================
 
+// ==========================
 const status = document.getElementById("scanStatus");
 status.style.color = "#1976d2";
-status.textContent = "🔄 商品欄を読み取り中...";
+status.textContent = "🔄 納品書を解析中...";
 
 try{
 
-// --------------------
-// base64変換
-// --------------------
+// --------------------------
+// 画像 → base64
+// --------------------------
 const base64 = await new Promise((resolve,reject)=>{
   const reader = new FileReader();
   reader.onload = ()=>resolve(reader.result.split(",")[1]);
@@ -387,20 +389,26 @@ const base64 = await new Promise((resolve,reject)=>{
   reader.readAsDataURL(file);
 });
 
-// --------------------
-// Vision API
-// --------------------
+// --------------------------
+// Vision API 呼び出し
+// --------------------------
 const res = await fetch(
 "https://vision.googleapis.com/v1/images:annotate?key="+API_KEY,
 {
 method:"POST",
-headers:{ "Content-Type":"application/json" },
+headers:{
+"Content-Type":"application/json"
+},
 body:JSON.stringify({
 requests:[
 {
 image:{content:base64},
-features:[{type:"DOCUMENT_TEXT_DETECTION"}],
-imageContext:{languageHints:["ja","en"]}
+features:[
+{type:"DOCUMENT_TEXT_DETECTION"}
+],
+imageContext:{
+languageHints:["ja","en"]
+}
 }
 ]
 })
@@ -408,50 +416,71 @@ imageContext:{languageHints:["ja","en"]}
 
 const json = await res.json();
 
+if(json.error){
+throw new Error(json.error.message);
+}
+
 const data = json.responses?.[0];
-if(!data) throw new Error("OCR失敗");
+
+if(!data){
+throw new Error("OCR結果なし");
+}
 
 const words = data.textAnnotations;
-if(!words || words.length<=1) throw new Error("文字なし");
 
-// ----------------------------------
+if(!words || words.length<=1){
+throw new Error("文字認識できませんでした");
+}
+
+// --------------------------
 // 全体サイズ取得
-// ----------------------------------
+// --------------------------
 let maxX = 0;
 let maxY = 0;
 
 words.forEach(w=>{
 if(!w.boundingPoly || !w.boundingPoly.vertices) return;
+
 w.boundingPoly.vertices.forEach(v=>{
-if(v.x>maxX) maxX=v.x;
-if(v.y>maxY) maxY=v.y;
+if(v.x > maxX) maxX = v.x;
+if(v.y > maxY) maxY = v.y;
 });
 });
 
-// ----------------------------------
-// 商品欄エリア（中央表部分のみ）
-// 左8%〜右78%
-// 上28%〜下74%
-// ----------------------------------
+// --------------------------
+// 商品欄だけ抽出
+// （この帳票専用）
+// --------------------------
 const area = {
-left:  maxX * 0.08,
-right: maxX * 0.78,
-top:   maxY * 0.28,
-bottom:maxY * 0.74
+left:   maxX * 0.10,
+right:  maxX * 0.73,
+top:    maxY * 0.38,
+bottom: maxY * 0.68
 };
 
-// ----------------------------------
-// 商品欄の文字だけ抽出
-// ----------------------------------
+// --------------------------
+// エリア内文字抽出
+// --------------------------
 let productWords = [];
 
 for(let i=1;i<words.length;i++){
 
-const w = words[i];
-const v = w.boundingPoly.vertices;
+let w = words[i];
+let v = w.boundingPoly.vertices;
 
-const x = (v[0].x + v[1].x + v[2].x + v[3].x)/4;
-const y = (v[0].y + v[1].y + v[2].y + v[3].y)/4;
+let x = (
+(v[0].x||0)+
+(v[1].x||0)+
+(v[2].x||0)+
+(v[3].x||0)
+)/4;
+
+let y = (
+(v[0].y||0)+
+(v[1].y||0)+
+(v[2].y||0)+
+(v[3].y||0)
+)/4;
 
 if(
 x >= area.left &&
@@ -465,18 +494,19 @@ x:x,
 y:y
 });
 }
+
 }
 
-// ----------------------------------
-// 行ごとにまとめる
-// ----------------------------------
+// --------------------------
+// Y座標で行まとめ
+// --------------------------
 productWords.sort((a,b)=>a.y-b.y);
 
 let rows = [];
 
 productWords.forEach(w=>{
 
-let row = rows.find(r=>Math.abs(r.y - w.y) < 18);
+let row = rows.find(r=>Math.abs(r.y-w.y)<18);
 
 if(!row){
 row = { y:w.y, items:[] };
@@ -487,10 +517,9 @@ row.items.push(w);
 
 });
 
-// ----------------------------------
-// 商品抽出
-// 左=商品名 中=数量 右=単価
-// ----------------------------------
+// --------------------------
+// 行ごと解析
+// --------------------------
 let resultItems = [];
 
 rows.forEach(r=>{
@@ -524,9 +553,19 @@ name = name
 .replace(/数量/g,"")
 .replace(/単価/g,"")
 .replace(/金額/g,"")
+.replace(/\s+/g,"")
 .trim();
 
-if(name.length < 2) return;
+// 不要文字除外
+if(
+name.length < 2 ||
+name.match(/電話|TEL|FAX|〒|住所|銀行|口座|埼玉|医科|大学|請求書|納品書/)
+){
+return;
+}
+
+// 重複除外
+if(resultItems.some(x=>x.name===name)) return;
 
 resultItems.push({
 name:name,
@@ -539,26 +578,31 @@ price:price
 // 最大6件
 resultItems = resultItems.slice(0,6);
 
-// ----------------------------------
-// 取引先名（様行だけ全文OCRから取得）
-// ----------------------------------
-let customerName = "";
+// --------------------------
+// 取引先名取得
+// --------------------------
+const fullText =
+data.fullTextAnnotation?.text || "";
 
-const fullText = data.fullTextAnnotation?.text || "";
-const lines = fullText.split("\n");
+let lines = fullText.split("\n")
+.map(v=>v.trim())
+.filter(v=>v);
+
+let customerName = "";
 
 for(let i=0;i<lines.length;i++){
 
 if(lines[i].includes("様")){
 
-customerName = lines[i]
+customerName =
+lines[i]
 .replace("様","")
 .replace(/御中/g,"")
 .trim();
 
 if(i>=1 && lines[i-1].length>5){
 customerName =
-lines[i-1].trim() + " " + customerName;
+lines[i-1] + " " + customerName;
 }
 
 break;
@@ -566,24 +610,38 @@ break;
 }
 
 if(customerName){
-document.getElementById("customer").value = customerName;
+document.getElementById("customer").value =
+customerName;
 }
 
-// ----------------------------------
+// --------------------------
+// 今日の日付セット
+// --------------------------
+let today = new Date();
+let yyyy = today.getFullYear();
+let mm = String(today.getMonth()+1).padStart(2,"0");
+let dd = String(today.getDate()).padStart(2,"0");
+
+document.getElementById("date").value =
+`${yyyy}-${mm}-${dd}`;
+
+// --------------------------
 // フォーム反映
-// ----------------------------------
-items.innerHTML="";
+// --------------------------
+items.innerHTML = "";
 
 if(resultItems.length===0){
+
 addItem();
+
 }else{
 
 resultItems.forEach(it=>{
 
-let div=document.createElement("div");
-div.className="row";
+let div = document.createElement("div");
+div.className = "row";
 
-div.innerHTML=`
+div.innerHTML = `
 <input class="n" value="${it.name}">
 <input class="q" value="${it.qty}" type="number" oninput="calc()">
 <input class="p" value="${it.price}" type="number" oninput="calc()">
@@ -597,19 +655,21 @@ items.appendChild(div);
 
 calc();
 
-status.style.color="#43a047";
-status.textContent="✅ 商品欄のみ読み取り完了";
+status.style.color = "#43a047";
+status.textContent =
+"✅ 読み取り完了（内容確認してください）";
 
 }catch(e){
 
 console.error(e);
 
-status.style.color="#e53935";
-status.textContent="❌ 読み取り失敗：" + e.message;
+status.style.color = "#e53935";
+status.textContent =
+"❌ 読み取り失敗：" + e.message;
 
 }
 
-event.target.value="";
+event.target.value = "";
 
 };
 </script>
