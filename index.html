@@ -54,26 +54,6 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
 
 <div id="pullIndicator" style="display:none;position:fixed;top:0;left:0;width:100%;text-align:center;padding:10px;background:#e3f2fd;color:#1976d2;font-size:13px;font-weight:bold;z-index:300">↓ 引っ張ってリロード</div>
 
-<!-- カメラガイドオーバーレイ -->
-
-<div id="cameraOverlay" class="hidden" style="position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:500;display:flex;flex-direction:column;align-items:center;justify-content:center">
-  <video id="cameraVideo" style="width:100%;max-height:70vh;object-fit:cover" playsinline></video>
-  <!-- ガイド枠 -->
-  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-55%);width:85%;height:55%;border:3px solid #43a047;border-radius:8px;box-shadow:0 0 0 9999px rgba(0,0,0,0.45);pointer-events:none">
-    <div style="position:absolute;top:-28px;left:0;right:0;text-align:center;color:#43a047;font-size:13px;font-weight:bold">帳票全体をガイド内に収めてください</div>
-    <!-- 四隅マーカー -->
-    <div style="position:absolute;top:-3px;left:-3px;width:20px;height:20px;border-top:4px solid #fff;border-left:4px solid #fff"></div>
-    <div style="position:absolute;top:-3px;right:-3px;width:20px;height:20px;border-top:4px solid #fff;border-right:4px solid #fff"></div>
-    <div style="position:absolute;bottom:-3px;left:-3px;width:20px;height:20px;border-bottom:4px solid #fff;border-left:4px solid #fff"></div>
-    <div style="position:absolute;bottom:-3px;right:-3px;width:20px;height:20px;border-bottom:4px solid #fff;border-right:4px solid #fff"></div>
-  </div>
-  <!-- ボタン -->
-  <div style="position:absolute;bottom:40px;display:flex;gap:20px">
-    <button onclick="closeCamera()" style="width:auto;padding:12px 24px;background:#666;border-radius:50px;font-size:15px">✕ キャンセル</button>
-    <button onclick="capturePhoto()" style="width:60px;height:60px;border-radius:50%;background:#fff;border:4px solid #43a047;font-size:24px;padding:0">📷</button>
-  </div>
-</div>
-
 <!-- ローディング -->
 
 <div id="loadingOverlay" class="loading-overlay hidden">
@@ -120,7 +100,7 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
 
 ```
 <!-- 写真読み取り -->
-<button onclick="openCamera()" style="background:#43a047;margin-bottom:4px">📷 写真から読み取る</button>
+<button onclick="document.getElementById('scanInput').click()" style="background:#43a047;margin-bottom:4px">📷 写真から読み取る</button>
 <input type="file" id="scanInput" accept="image/*" capture="environment" class="hidden" onchange="scanImage(event)">
 <div id="scanStatus" style="font-size:13px;color:#1976d2;min-height:18px;margin-bottom:6px"></div>
 
@@ -739,60 +719,21 @@ function updateBackupTime(){
   });
 })();
 
-/* ===== CAMERA GUIDE ===== */
-window.openCamera = function(){
-  const overlay = document.getElementById("cameraOverlay");
-  overlay.classList.remove("hidden");
-  const video = document.getElementById("cameraVideo");
-  navigator.mediaDevices.getUserMedia({
-    video:{ facingMode:"environment", width:{ideal:1920}, height:{ideal:1080} }
-  }).then(stream=>{
-    video.srcObject = stream;
-    video.play();
-    window._cameraStream = stream;
-  }).catch(()=>{
-    overlay.classList.add("hidden");
-    document.getElementById("scanInput").click();
-  });
-};
-
-window.closeCamera = function(){
-  if(window._cameraStream){
-    window._cameraStream.getTracks().forEach(t=>t.stop());
-    window._cameraStream = null;
-  }
-  document.getElementById("cameraOverlay").classList.add("hidden");
-};
-
-window.capturePhoto = function(){
-  const video  = document.getElementById("cameraVideo");
-  const canvas = document.createElement("canvas");
-  canvas.width  = video.videoWidth;
-  canvas.height = video.videoHeight;
-  canvas.getContext("2d").drawImage(video, 0, 0);
-  canvas.toBlob(blob=>{ closeCamera(); processImage(blob); }, "image/jpeg", 0.92);
-};
-
+/* ===== SCAN IMAGE (Google Vision OCR) ===== */
 window.scanImage = async function(event){
   const file = event.target.files[0];
   if(!file) return;
-  event.target.value = "";
-  processImage(file);
-};
-
-/* ===== SCAN IMAGE (Google Vision OCR) ===== */
-async function processImage(blob){
   const API_KEY = "AIzaSyAlGc-fBeHq4fZte5CTOaf3_y4g5q5OR4I";
   const status  = document.getElementById("scanStatus");
-  status.style.color = "#1976d2";
-  status.textContent = "🔄 納品書を解析中…";
+  status.style.color   = "#1976d2";
+  status.textContent   = "🔄 納品書を解析中…";
 
   try {
     const base64 = await new Promise((resolve,reject)=>{
       const reader = new FileReader();
       reader.onload  = ()=> resolve(reader.result.split(",")[1]);
       reader.onerror = reject;
-      reader.readAsDataURL(blob);
+      reader.readAsDataURL(file);
     });
 
     const res = await fetch(
@@ -817,7 +758,7 @@ async function processImage(blob){
     const words = data.textAnnotations;
     if(!words||words.length<=1) throw new Error("文字を認識できませんでした");
 
-    // 全体サイズ取得
+    // 全体サイズ
     let maxX=0, maxY=0;
     words.forEach(w=>{
       (w.boundingPoly?.vertices||[]).forEach(v=>{
@@ -826,7 +767,7 @@ async function processImage(blob){
       });
     });
 
-    // 全ワード座標リスト作成
+    // 全ワード座標リスト
     let allWords=[];
     for(let i=1;i<words.length;i++){
       const w=words[i];
@@ -836,109 +777,86 @@ async function processImage(blob){
       allWords.push({text:w.description, x, y});
     }
 
-    // 向き判定：「品名」「数量」「単価」ヘッダーを探す
-    const findWord = (arr, targets) => arr.find(w=>targets.some(t=>w.text===t));
-    let hinmei = findWord(allWords,["品名","品"]);
-    let suryo  = findWord(allWords,["数量","数"]);
-    let tanka  = findWord(allWords,["単価","単"]);
-    let headerCands = [hinmei,suryo,tanka].filter(Boolean);
-    let headerY = headerCands.length>0
-      ? headerCands.reduce((s,w)=>s+w.y,0)/headerCands.length
-      : null;
-
-    // ヘッダーが画像の60%より下 → 180度回転している
-    let rotated = headerY!==null && headerY > maxY*0.6;
-    if(rotated){
-      allWords = allWords.map(w=>({text:w.text, x:maxX-w.x, y:maxY-w.y}));
-      if(hinmei){hinmei.x=maxX-hinmei.x; hinmei.y=maxY-hinmei.y;}
-      if(suryo) {suryo.x=maxX-suryo.x;   suryo.y=maxY-suryo.y;}
-      if(tanka) {tanka.x=maxX-tanka.x;   tanka.y=maxY-tanka.y;}
-      headerY = maxY-headerY;
-    }
-
-    // ヘッダーが不明な場合は行スキャンで推定
-    if(headerY===null){
-      let rows2=[];
-      allWords.forEach(w=>{
-        let r=rows2.find(r=>Math.abs(r.y-w.y)<20);
-        if(!r){r={y:w.y,ws:[]}; rows2.push(r);}
-        r.ws.push(w.text);
-      });
-      for(let r of rows2){
-        if(r.ws.some(t=>t.includes("品"))&&r.ws.some(t=>t.includes("数"))&&r.ws.some(t=>t.includes("単"))){
-          headerY=r.y; break;
-        }
-      }
-      headerY = headerY||maxY*0.45;
-    }
-
-    // 明細エリアの設定
-    const detailTop    = headerY+20;
-    const detailBottom = maxY*0.88;
-    const nameRight    = maxX*0.45;
-    const qtyLeft      = maxX*0.43;
-    const qtyRight     = maxX*0.55;
-    const priceLeft    = maxX*0.53;
-    const priceRight   = maxX*0.68;
-
-    // 明細ワード抽出
-    let detailWords = allWords.filter(w=>
-      w.y>=detailTop && w.y<=detailBottom && w.x<=priceRight
-    );
-
-    // Y座標で行グループ化
-    detailWords.sort((a,b)=>a.y-b.y);
-    let rows=[];
-    detailWords.forEach(w=>{
-      let row=rows.find(r=>Math.abs(r.y-w.y)<22);
-      if(!row){row={y:w.y,items:[]}; rows.push(row);}
-      row.items.push(w);
-    });
-
-    // 各行を解析
-    let resultItems=[];
-    rows.forEach(r=>{
-      r.items.sort((a,b)=>a.x-b.x);
-      const nw = r.items.filter(w=>w.x<nameRight);
-      const qw = r.items.filter(w=>w.x>=qtyLeft  &&w.x<qtyRight);
-      const pw = r.items.filter(w=>w.x>=priceLeft &&w.x<priceRight);
-      let name     = nw.map(w=>w.text).join("").replace(/品名|数量|単価|金額|備考/g,"").replace(/\s/g,"").trim();
-      let qtyStr   = qw.map(w=>w.text).join("").replace(/,/g,"");
-      let priceStr = pw.map(w=>w.text).join("").replace(/,/g,"");
-      const qty    = parseInt(qtyStr);
-      const price  = parseInt(priceStr);
-      if(!name||name.length<2)                   return;
-      if(isNaN(qty)||qty<=0||qty>9999)            return;
-      if(isNaN(price)||price<=0||price>999999)    return;
-      if(/電話|TEL|FAX|〒|住所|銀行|口座|支店|浦和|川越|請求書|納品書|登録番号/.test(name)) return;
-      if(resultItems.some(x=>x.name===name))      return;
-      resultItems.push({name,qty,price});
-    });
-    resultItems = resultItems.slice(0,8);
-
-    // 取引先名抽出
-    const fullText = data.fullTextAnnotation?.text||"";
-    let lines = fullText.split("\n").map(v=>v.trim()).filter(v=>v);if(rotated) lines=lines.reverse();
-    let customerName="";
+    // 取引先名（「様」を含む行から抽出）
+    const fullText = data.fullTextAnnotation?.text || "";
+    const lines = fullText.split("\n").map(v=>v.trim()).filter(v=>v);
+    let customerName = "";
     for(let i=0;i<lines.length;i++){
       if(lines[i].includes("様")){
-        let samePart=lines[i].replace(/様.*$/,"").replace(/御中/g,"").trim();
-        if(i>=1&&!lines[i-1].match(/^\d|TEL|FAX|〒|年|月|日/)){
-          customerName=lines[i-1].trim()+samePart;
+        let samePart = lines[i].replace(/様.*$/, "").replace(/御中/g,"").trim();
+        if(i>=1 && !lines[i-1].match(/^\d|TEL|FAX|〒|年|月|日/)){
+          customerName = lines[i-1].trim() + samePart;
         } else {
-          customerName=samePart;
+          customerName = samePart;
         }
-        customerName=customerName.replace(/\s+/g," ").trim();
+        customerName = customerName.replace(/\s+/g," ").trim();
         break;
       }
     }
-    if(customerName) customer.value=customerName;
+    if(customerName) customer.value = customerName;
 
     // 今日の日付
     let t=new Date();
     date.value=t.getFullYear()+"-"+String(t.getMonth()+1).padStart(2,"0")+"-"+String(t.getDate()).padStart(2,"0");
 
-    // フォームに反映
+    // 商品欄エリア（textAnnotationsベース）
+    let maxX2=0, maxY2=0;
+    words.forEach(w=>{
+      (w.boundingPoly?.vertices||[]).forEach(v=>{
+        if((v.x||0)>maxX2) maxX2=v.x;
+        if((v.y||0)>maxY2) maxY2=v.y;
+      });
+    });
+
+    const area = {
+      left:   maxX2 * 0.05,
+      right:  maxX2 * 0.70,
+      top:    maxY2 * 0.55,
+      bottom: maxY2 * 0.82
+    };
+    const colQtyLeft   = maxX2 * 0.42;
+    const colPriceLeft = maxX2 * 0.52;
+    const colPriceRight= maxX2 * 0.68;
+
+    let productWords=[];
+    for(let i=1;i<words.length;i++){
+      const w=words[i];
+      const v=w.boundingPoly.vertices;
+      const x=((v[0].x||0)+(v[1].x||0)+(v[2].x||0)+(v[3].x||0))/4;
+      const y=((v[0].y||0)+(v[1].y||0)+(v[2].y||0)+(v[3].y||0))/4;
+      if(x>=area.left&&x<=area.right&&y>=area.top&&y<=area.bottom){
+        productWords.push({text:w.description,x,y});
+      }
+    }
+
+    productWords.sort((a,b)=>a.y-b.y);
+    let rows=[];
+    productWords.forEach(w=>{
+      let row=rows.find(r=>Math.abs(r.y-w.y)<18);
+      if(!row){row={y:w.y,items:[]}; rows.push(row);}
+      row.items.push(w);
+    });
+
+    let resultItems=[];
+    rows.forEach(r=>{
+      r.items.sort((a,b)=>a.x-b.x);
+      const nw = r.items.filter(w=>w.x < colQtyLeft);
+      const qw = r.items.filter(w=>w.x >= colQtyLeft   && w.x < colPriceLeft);
+      const pw = r.items.filter(w=>w.x >= colPriceLeft && w.x < colPriceRight);
+      let name     = nw.map(w=>w.text).join("").replace(/品名|数量|単価|金額|備考/g,"").replace(/\s/g,"").trim();
+      let qtyStr   = qw.map(w=>w.text).join("").replace(/,/g,"");
+      let priceStr = pw.map(w=>w.text).join("").replace(/,/g,"");
+      const qty    = parseInt(qtyStr);
+      const price  = parseInt(priceStr);
+      if(!name||name.length<2)                 return;
+      if(isNaN(qty)||qty<=0||qty>9999)         return;
+      if(isNaN(price)||price<=0||price>999999) return;
+      if(/電話|TEL|FAX|〒|住所|銀行|口座|支店|浦和|川越|請求書|納品書/.test(name)) return;
+      if(resultItems.some(x=>x.name===name))   return;
+      resultItems.push({name,qty,price});
+    });
+    resultItems=resultItems.slice(0,8);
+
     items.innerHTML="";
     if(resultItems.length===0){
       addItem();
@@ -953,7 +871,7 @@ async function processImage(blob){
       });
       calc();
       status.style.color="#43a047";
-      status.textContent="✅ 読み取り完了！内容を確認してください"+(rotated?" (回転補正済み)":"");
+      status.textContent="✅ 読み取り完了！内容を確認してください";
     }
 
   } catch(e) {
@@ -962,7 +880,9 @@ async function processImage(blob){
     status.textContent="❌ 読み取り失敗："+e.message;
     addItem();
   }
-}
+
+  event.target.value="";
+};
 
 </script>
 
