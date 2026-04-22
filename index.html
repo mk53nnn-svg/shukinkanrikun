@@ -774,11 +774,13 @@ window.scanImage = async function(event){
     });
 
     // 商品欄エリア（帳票の構造に合わせた割合）
+    // 写真を見ると：銀行欄がtop38%付近、商品明細はtop48%〜bottom78%
+    // 右端は単価列まで（金額・備考・銀行欄を除外）
     const area = {
       left:   maxX * 0.05,
-      right:  maxX * 0.73,
-      top:    maxY * 0.38,
-      bottom: maxY * 0.75
+      right:  maxX * 0.78,
+      top:    maxY * 0.48,
+      bottom: maxY * 0.80
     };
 
     // エリア内の文字を抽出
@@ -831,10 +833,16 @@ window.scanImage = async function(event){
     let customerName = "";
     for(let i=0; i<lines.length; i++){
       if(lines[i].includes("様")){
-        customerName = lines[i].replace("様","").replace(/御中/g,"").trim();
-        if(i>=1 && lines[i-1].length>3){
-          customerName = lines[i-1] + customerName;
+        // 「様」がある行から「様」を除いた部分
+        let samePart = lines[i].replace(/様.*$/, "").replace(/御中/g,"").trim();
+        // 「様」の前の行も含めて取引先名を構築（複数行対応）
+        if(i>=1 && !lines[i-1].match(/^\d|TEL|FAX|〒|年|月|日/)){
+          customerName = lines[i-1].trim() + samePart;
+        } else {
+          customerName = samePart;
         }
+        // 末尾の不要文字除去
+        customerName = customerName.replace(/\s+/g," ").trim();
         break;
       }
     }
