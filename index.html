@@ -66,14 +66,15 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
 
   <div style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none">
 
+```
 <!-- 暗転マスク（ガイド外）横長に調整 top:25% bottom:25% -->
 <div style="position:absolute;top:0;left:0;right:0;height:25%;background:rgba(0,0,0,0.6)"></div>
-<div style="position:absolute;bottom:0;left:0;right:0;height:25%;background:rgba(0,0,0,0.6)"></div>
-<div style="position:absolute;top:25%;bottom:25%;left:0;width:3%;background:rgba(0,0,0,0.6)"></div>
-<div style="position:absolute;top:25%;bottom:25%;right:0;width:3%;background:rgba(0,0,0,0.6)"></div>
+<div style="position:absolute;bottom:0;left:0;right:0;height:12%;background:rgba(0,0,0,0.6)"></div>
+<div style="position:absolute;top:25%;bottom:12%;left:0;width:3%;background:rgba(0,0,0,0.6)"></div>
+<div style="position:absolute;top:25%;bottom:12%;right:0;width:3%;background:rgba(0,0,0,0.6)"></div>
 
 <!-- ガイド枠（横長・帳票の商品明細エリア） -->
-<div style="position:absolute;top:25%;bottom:25%;left:3%;right:3%;border:2px solid #43a047">
+<div style="position:absolute;top:25%;bottom:12%;left:3%;right:3%;border:2px solid #43a047">
 
   <!-- 四隅マーカー -->
   <div style="position:absolute;top:-2px;left:-2px;width:18px;height:18px;border-top:4px solid #fff;border-left:4px solid #fff"></div>
@@ -95,6 +96,7 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
 <!-- 上部ガイドメッセージ -->
 <div style="position:absolute;top:6%;left:0;right:0;text-align:center;color:#fff;font-size:14px;font-weight:bold;text-shadow:0 1px 3px rgba(0,0,0,0.8)">帳票の商品明細欄をガイド枠に合わせてください</div>
 <div style="position:absolute;top:14%;left:0;right:0;text-align:center;color:#43a047;font-size:12px;text-shadow:0 1px 3px rgba(0,0,0,0.8)">品名 ｜ 数量 ｜ 単価 の列を黄色の線に揃えてください</div>
+```
 
   </div>
 
@@ -151,6 +153,7 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
   <div id="addPage" class="card hidden">
     <h3>納品登録</h3>
 
+```
 <!-- 写真読み取り -->
 <button onclick="openCamera()" style="background:#43a047;margin-bottom:4px">📷 写真から読み取る</button>
 <input type="file" id="scanInput" accept="image/*" capture="environment" class="hidden" onchange="scanImage(event)">
@@ -167,6 +170,7 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
 </div>
 <button onclick="save()">保存</button>
 <div id="saveSuccessMsg" style="display:none;margin-top:8px;padding:10px;background:#e8f5e9;border-radius:10px;color:#2e7d32;font-size:14px;font-weight:bold;text-align:center">✅ 登録しました！続けて入力できます</div>
+```
 
   </div>
 
@@ -175,6 +179,7 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
   <div id="listPage" class="card hidden">
     <h3>一覧</h3>
 
+```
 <div style="display:flex;gap:6px;margin-bottom:4px">
   <input id="searchBox" type="search" placeholder="🔍 取引先・商品名で検索" style="margin:0" onkeydown="if(event.key==='Enter'){this.blur();doSearch();}">
   <button onclick="doSearch()" style="width:auto;padding:10px 16px;margin:0;white-space:nowrap">検索</button>
@@ -201,6 +206,7 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
 </div>
 
 <div id="records"></div>
+```
 
   </div>
 
@@ -220,6 +226,7 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
     <input id="newPw" placeholder="パスワード">
     <button onclick="addUser()">追加</button>
 
+```
 <hr>
 
 <h4>💾 データバックアップ</h4>
@@ -233,6 +240,7 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
 <div style="font-size:12px;color:#999;margin-top:6px">
   最終バックアップ：<span id="lastBackupTime">未保存</span>
 </div>
+```
 
   </div>
 
@@ -927,7 +935,7 @@ async function processBlob(blob){
     const guideLeft   = maxX2 * 0.03;
     const guideRight  = maxX2 * 0.97;
     const guideTop    = maxY2 * 0.25;
-    const guideBottom = maxY2 * 0.75;
+    const guideBottom = maxY2 * 0.88;
     const guideWidth  = guideRight - guideLeft;
 
     const area = {
@@ -954,7 +962,7 @@ async function processBlob(blob){
     productWords.sort((a,b)=>a.y-b.y);
     let rows=[];
     productWords.forEach(w=>{
-      let row=rows.find(r=>Math.abs(r.y-w.y)<28);
+      let row=rows.find(r=>Math.abs(r.y-w.y)<35);
       if(!row){row={y:w.y,items:[]}; rows.push(row);}
       row.items.push(w);
     });
