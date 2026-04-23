@@ -67,14 +67,14 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
   <div style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none">
 
 ```
-<!-- 暗転マスク（ガイド外） -->
-<div style="position:absolute;top:0;left:0;right:0;height:12%;background:rgba(0,0,0,0.6)"></div>
-<div style="position:absolute;bottom:0;left:0;right:0;height:15%;background:rgba(0,0,0,0.6)"></div>
-<div style="position:absolute;top:12%;bottom:15%;left:0;width:3%;background:rgba(0,0,0,0.6)"></div>
-<div style="position:absolute;top:12%;bottom:15%;right:0;width:3%;background:rgba(0,0,0,0.6)"></div>
+<!-- 暗転マスク（ガイド外）横長に調整 top:25% bottom:25% -->
+<div style="position:absolute;top:0;left:0;right:0;height:25%;background:rgba(0,0,0,0.6)"></div>
+<div style="position:absolute;bottom:0;left:0;right:0;height:25%;background:rgba(0,0,0,0.6)"></div>
+<div style="position:absolute;top:25%;bottom:25%;left:0;width:3%;background:rgba(0,0,0,0.6)"></div>
+<div style="position:absolute;top:25%;bottom:25%;right:0;width:3%;background:rgba(0,0,0,0.6)"></div>
 
-<!-- ガイド枠（帳票の商品明細エリア） -->
-<div style="position:absolute;top:12%;bottom:15%;left:3%;right:3%;border:2px solid #43a047">
+<!-- ガイド枠（横長・帳票の商品明細エリア） -->
+<div style="position:absolute;top:25%;bottom:25%;left:3%;right:3%;border:2px solid #43a047">
 
   <!-- 四隅マーカー -->
   <div style="position:absolute;top:-2px;left:-2px;width:18px;height:18px;border-top:4px solid #fff;border-left:4px solid #fff"></div>
@@ -82,27 +82,20 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
   <div style="position:absolute;bottom:-2px;left:-2px;width:18px;height:18px;border-bottom:4px solid #fff;border-left:4px solid #fff"></div>
   <div style="position:absolute;bottom:-2px;right:-2px;width:18px;height:18px;border-bottom:4px solid #fff;border-right:4px solid #fff"></div>
 
-  <!-- 列の区切り線 -->
-  <!-- 品名列(0%〜58%) | 数量列(58%〜72%) | 単価列(72%〜88%) | 金額(88%〜100%) -->
-  <div style="position:absolute;top:0;bottom:0;left:58%;width:1px;background:rgba(255,255,0,0.7)"></div>
-  <div style="position:absolute;top:0;bottom:0;left:72%;width:1px;background:rgba(255,255,0,0.7)"></div>
-  <div style="position:absolute;top:0;bottom:0;left:88%;width:1px;background:rgba(255,100,100,0.5)"></div>
+  <!-- 列の区切り線：品名(0〜60%) | 数量(60〜80%) | 単価(80〜100%) 金額列なし -->
+  <div style="position:absolute;top:0;bottom:0;left:60%;width:2px;background:rgba(255,255,0,0.85)"></div>
+  <div style="position:absolute;top:0;bottom:0;left:80%;width:2px;background:rgba(255,255,0,0.85)"></div>
 
   <!-- 列ラベル -->
-  <div style="position:absolute;top:4px;left:1%;font-size:11px;color:#43a047;font-weight:bold;background:rgba(0,0,0,0.5);padding:1px 4px;border-radius:3px">品名</div>
-  <div style="position:absolute;top:4px;left:59%;font-size:11px;color:#ff0;font-weight:bold;background:rgba(0,0,0,0.5);padding:1px 4px;border-radius:3px">数量</div>
-  <div style="position:absolute;top:4px;left:73%;font-size:11px;color:#ff0;font-weight:bold;background:rgba(0,0,0,0.5);padding:1px 4px;border-radius:3px">単価</div>
-  <div style="position:absolute;top:4px;left:89%;font-size:11px;color:rgba(255,100,100,0.9);font-weight:bold;background:rgba(0,0,0,0.5);padding:1px 4px;border-radius:3px">金額</div>
+  <div style="position:absolute;top:6px;left:1%;font-size:12px;color:#43a047;font-weight:bold;background:rgba(0,0,0,0.55);padding:2px 6px;border-radius:3px">品名</div>
+  <div style="position:absolute;top:6px;left:61%;font-size:12px;color:#ff0;font-weight:bold;background:rgba(0,0,0,0.55);padding:2px 6px;border-radius:3px">数量</div>
+  <div style="position:absolute;top:6px;left:81%;font-size:12px;color:#ff0;font-weight:bold;background:rgba(0,0,0,0.55);padding:2px 6px;border-radius:3px">単価</div>
 
 </div>
 
 <!-- 上部ガイドメッセージ -->
-<div style="position:absolute;top:4%;left:0;right:0;text-align:center;color:#fff;font-size:13px;font-weight:bold;text-shadow:0 1px 3px rgba(0,0,0,0.8)">
-  帳票の商品明細欄をガイド枠に合わせてください
-</div>
-<div style="position:absolute;top:8%;left:0;right:0;text-align:center;color:#43a047;font-size:11px;text-shadow:0 1px 3px rgba(0,0,0,0.8)">
-  品名・数量・単価の列を黄色の線に揃えてください
-</div>
+<div style="position:absolute;top:6%;left:0;right:0;text-align:center;color:#fff;font-size:14px;font-weight:bold;text-shadow:0 1px 3px rgba(0,0,0,0.8)">帳票の商品明細欄をガイド枠に合わせてください</div>
+<div style="position:absolute;top:14%;left:0;right:0;text-align:center;color:#43a047;font-size:12px;text-shadow:0 1px 3px rgba(0,0,0,0.8)">品名 ｜ 数量 ｜ 単価 の列を黄色の線に揃えてください</div>
 ```
 
   </div>
@@ -878,22 +871,42 @@ async function processBlob(blob){
       allWords.push({text:w.description, x, y});
     }
 
-    // 取引先名（「様」を含む行から抽出）
+    // 取引先名抽出
+    // ルール：「埼玉県」を含む住所行の次の行から「様」の前までを取得
+    // フォールバック：「様」を含む行の「様」前のみ
     const fullText = data.fullTextAnnotation?.text || "";
     const lines = fullText.split("\n").map(v=>v.trim()).filter(v=>v);
     let customerName = "";
-    for(let i=0;i<lines.length;i++){
-      if(lines[i].includes("様")){
-        let samePart = lines[i].replace(/様.*$/, "").replace(/御中/g,"").trim();
-        if(i>=1 && !lines[i-1].match(/^\d|TEL|FAX|〒|年|月|日/)){
-          customerName = lines[i-1].trim() + samePart;
-        } else {
-          customerName = samePart;
+
+    // 「埼玉県」行を探す
+    let saitamaIdx = lines.findIndex(l=>l.includes("埼玉県"));
+
+    if(saitamaIdx >= 0){
+      // 埼玉県行の次の行から「様」を含む行を探す
+      for(let i=saitamaIdx+1; i<lines.length; i++){
+        if(lines[i].includes("様")){
+          customerName = lines[i].replace(/様.*$/, "").replace(/御中/g,"").trim();
+          break;
         }
-        customerName = customerName.replace(/\s+/g," ").trim();
-        break;
+        // 「様」が同じ行にない場合：登録番号・TEL・会社名などを除いた行を候補に
+        if(!lines[i].match(/^T\d|登録|TEL|FAX|〒|埼玉保育|株式会社|さいたま|048|350/)){
+          customerName = lines[i].replace(/様.*$/, "").replace(/御中/g,"").trim();
+        }
       }
     }
+
+    // フォールバック：「様」の前の部分だけ
+    if(!customerName){
+      for(let i=0;i<lines.length;i++){
+        if(lines[i].includes("様")){
+          customerName = lines[i].replace(/様.*$/, "").replace(/御中/g,"").trim();
+          // 登録番号が混入していたら除去
+          customerName = customerName.replace(/^T\d{13}/, "").replace(/登録番号.*$/, "").trim();
+          break;
+        }
+      }
+    }
+
     if(customerName) customer.value = customerName;
 
     // 今日の日付
@@ -912,21 +925,23 @@ async function processBlob(blob){
     // ガイド枠に合わせた固定座標
     // ガイド: 横3%〜97%, 縦12%〜72%
     // 列: 品名(3%〜57%), 数量(57%〜69%), 単価(69%〜84%), 金額(84%〜97%)
+    // ガイド枠座標（横長: top25%〜bottom75%, left3%〜right97%）
+    // 列: 品名(0〜60%) | 数量(60〜80%) | 単価(80〜100%)
     const guideLeft   = maxX2 * 0.03;
     const guideRight  = maxX2 * 0.97;
-    const guideTop    = maxY2 * 0.12;
-    const guideBottom = maxY2 * 0.85;
+    const guideTop    = maxY2 * 0.25;
+    const guideBottom = maxY2 * 0.75;
     const guideWidth  = guideRight - guideLeft;
 
     const area = {
       left:   guideLeft,
-      right:  guideLeft + guideWidth * 0.84,  // 金額列の左端まで
+      right:  guideRight,
       top:    guideTop,
       bottom: guideBottom
     };
-    const colQtyLeft   = guideLeft + guideWidth * 0.58;
-    const colPriceLeft = guideLeft + guideWidth * 0.72;
-    const colPriceRight= guideLeft + guideWidth * 0.84;
+    const colQtyLeft   = guideLeft + guideWidth * 0.60;
+    const colPriceLeft = guideLeft + guideWidth * 0.80;
+    const colPriceRight= guideRight;
 
     let productWords=[];
     for(let i=1;i<words.length;i++){
