@@ -506,7 +506,7 @@ function load(){
   visible.forEach(({r,i})=>{
     let userLabel=users[currentUser].admin?`<span style="font-size:12px;color:#888">${users[r.user]?.name||r.user}</span><br>`:"";
     // 商品名先頭4文字
-    let firstName = (r.items && r.items[0] && r.items[0].name) ? r.items[0].name.slice(0,4) : "";
+    let firstName = (r.items && r.items[0] && r.items[0].name) ? r.items[0].name : "";
     // メモ先頭6文字
     let memoShort = (r.memo && r.memo.trim()) ? r.memo.trim().slice(0,6) : "";
     let memoSpan  = memoShort ? `<span style="font-size:12px;color:#888;margin-left:6px">📝${memoShort}</span>` : "";
