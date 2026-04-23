@@ -169,6 +169,7 @@ button{background:#1976d2;color:#fff;border:none;font-weight:bold;cursor:pointer
   <textarea id="memo" placeholder="備考・メモを入力（任意）"></textarea>
 </div>
 <button onclick="save()">保存</button>
+<div id="saveSuccessMsg" style="display:none;margin-top:8px;padding:10px;background:#e8f5e9;border-radius:10px;color:#2e7d32;font-size:14px;font-weight:bold;text-align:center">✅ 登録しました！続けて入力できます</div>
 ```
 
   </div>
@@ -442,7 +443,11 @@ window.save = async function(){
     if(editIndex===-1){ await pushRecord(obj); }
     else { let k=recordsCache[editIndex]._key; obj.paid=recordsCache[editIndex].paid; await updateRecord(k,obj); }
   } finally { hideLoading(); }
-  resetAddForm(); show("list");
+  resetAddForm();
+  // 保存完了メッセージを表示（画面遷移しない）
+  let msg = document.getElementById("saveSuccessMsg");
+  msg.style.display = "block";
+  setTimeout(()=>{ msg.style.display = "none"; }, 2500);
 };
 
 /* ===== FILTER ===== */
